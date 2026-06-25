@@ -5,8 +5,8 @@ import type { DateFilters } from '../api/endpoints'
 import type { StatusPoint } from '../types/api'
 import type { ExtendedChartsData, DeliveryExtData } from '../types/api'
 
-// 5-minute refresh for live periods (today / yesterday / week / month)
-const LIVE_MS = 5 * 60 * 1000
+// 2-minute refresh for live periods (today / yesterday / week / month)
+const LIVE_MS = 2 * 60 * 1000
 
 function useFilterState(): DateFilters {
   const dateRange = useAppStore(s => s.dateRange)
@@ -35,6 +35,7 @@ export function useKpis() {
     queryKey: ['kpis', f],
     queryFn: () => api.fetchKpis(f),
     refetchInterval: ri,
+    refetchIntervalInBackground: true,
     staleTime: 60_000,
   })
 }
@@ -47,6 +48,7 @@ export function useAgents() {
     queryKey: ['agents', f],
     queryFn: () => api.fetchAgents(f),
     refetchInterval: ri,
+    refetchIntervalInBackground: true,
     staleTime: 60_000,
   })
 }
@@ -59,6 +61,7 @@ export function useDeliveries() {
     queryKey: ['deliveries', f],
     queryFn: () => api.fetchDeliveries(f),
     refetchInterval: ri,
+    refetchIntervalInBackground: true,
     staleTime: 60_000,
   })
 }
@@ -83,6 +86,7 @@ export function useCharts() {
     queryKey: ['charts', f],
     queryFn: () => api.fetchCharts(f),
     refetchInterval: ri,
+    refetchIntervalInBackground: true,
     staleTime: 60_000,
   })
 }
@@ -95,6 +99,7 @@ export function useClients(limit = 20) {
     queryKey: ['clients', f, limit],
     queryFn: () => api.fetchClients(f, limit),
     refetchInterval: ri,
+    refetchIntervalInBackground: true,
     staleTime: 60_000,
   })
 }
@@ -117,6 +122,7 @@ export function useStatusStats() {
     queryKey: ['statusStats', dateRange.from, dateRange.to],
     queryFn: (): Promise<StatusPoint[]> => api.fetchStatusStats(dateRange.from, dateRange.to),
     refetchInterval: ri,
+    refetchIntervalInBackground: true,
     staleTime: 60_000,
   })
 }
@@ -131,6 +137,7 @@ export function useChartsExtended() {
     queryFn: (): Promise<ExtendedChartsData> =>
       api.fetchChartsExtended(dateRange.from, dateRange.to, statusFilter),
     refetchInterval: ri,
+    refetchIntervalInBackground: true,
     staleTime: 60_000,
   })
 }
@@ -143,6 +150,7 @@ export function useDeliveriesExtended(limit = 30) {
     queryKey: ['deliveriesExt', f, limit],
     queryFn: (): Promise<DeliveryExtData[]> => api.fetchDeliveriesExtended(f, limit),
     refetchInterval: ri,
+    refetchIntervalInBackground: true,
     staleTime: 60_000,
   })
 }
