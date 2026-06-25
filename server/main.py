@@ -6,9 +6,10 @@ Architecture: RITM API → PostgreSQL → FastAPI → Dashboard
 import asyncio
 import sys
 
-# psycopg v3 requires SelectorEventLoop on Windows
+# psycopg v3 requires SelectorEventLoop on Windows (WindowsSelectorEventLoopPolicy deprecated in 3.14)
 if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    import selectors as _sel
+    asyncio.set_event_loop(asyncio.SelectorEventLoop(_sel.SelectSelector()))
 
 import json
 import logging
