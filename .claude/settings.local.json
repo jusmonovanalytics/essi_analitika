@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"http://localhost:8001/api/data/stop\" -X POST)",
+      "Bash(npx tsc *)",
+      "PowerShell(Stop-Process -Id 8001,30536,19372 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Id 21668,28224 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8001,5173,5174 -State Listen -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Id 30536 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 8001 -State Listen -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Id 19372 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(netstat -ano)",
+      "PowerShell(taskkill /PID 30536 /F 2>&1)",
+      "PowerShell(taskkill /PID 19372 /F 2>&1)",
+      "PowerShell(Get-Process -Id 30536,19372 -ErrorAction SilentlyContinue)",
+      "PowerShell(Start-Process -FilePath \"cmd.exe\" -ArgumentList \"/c cd /d d:\\\\ESSI\\\\server && python run.py 2>&1 > d:\\\\ESSI\\\\server\\\\server.log\" -WindowStyle Hidden)",
+      "PowerShell(Invoke-RestMethod http://localhost:8001/health -ErrorAction SilentlyContinue)",
+      "Bash(python run.py)",
+      "Bash(curl -s http://localhost:8001/health)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(curl -s \"http://localhost:8001/api/charts-extended?dateFrom=2026-06-01&dateTo=2026-06-24\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('weekday:', len\\(d.get\\('weekday',[]\\)\\), 'items'\\); print\\('market_types:', len\\(d.get\\('market_types',[]\\)\\), 'items'\\); print\\('Sample weekday:', d['weekday'][:2]\\); print\\('Sample market:', d['market_types'][:3]\\)\")",
+      "Bash(curl -s \"http://localhost:8001/api/deliveries-extended?dateFrom=2026-06-01&dateTo=2026-06-24&limit=5\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('deliveries:', len\\(d\\), 'items'\\); [print\\(x['delivery_man_name'][:20], x['order_count'], x['total_weight']\\) for x in d[:3]]\")",
+      "Bash(curl -s \"http://localhost:8001/api/deliveries-extended?dateFrom=2026-06-01&dateTo=2026-06-24&limit=3\")",
+      "Bash(curl -s \"http://localhost:8001/openapi.json\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); paths=[p for p in d['paths'] if 'extended' in p or 'charts' in p]; print\\('\\\\n'.join\\(paths\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\(sorted\\(d['paths'].keys\\(\\)\\)\\)\\)\")"
+    ]
+  }
+}

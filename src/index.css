@@ -1,0 +1,205 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Theme Variables ──────────────────────────────────────────────────────── */
+:root {
+  --bg-base:        #F1F5F9;
+  --bg-surface:     #FFFFFF;
+  --bg-card:        #FFFFFF;
+  --bg-card-border: #E2E8F0;
+  --bg-sidebar:     #1E293B;
+  --bg-header:      #FFFFFF;
+  --text-primary:   #0F172A;
+  --text-secondary: #475569;
+  --text-muted:     #94A3B8;
+  --shadow-card:    0 1px 3px rgba(0,0,0,0.15);
+  --scrollbar:      rgba(100,116,139,0.3);
+  --accent-blue:    #3B82F6;
+  --accent-green:   #22C55E;
+  --accent-red:     #EF4444;
+  --zebra:          0 0 0;
+}
+
+:root.dark {
+  --bg-base:        #0F172A;
+  --bg-surface:     #1E293B;
+  --bg-card:        #1E293B;
+  --bg-card-border: #334155;
+  --bg-sidebar:     #0F172A;
+  --bg-header:      #1E293B;
+  --text-primary:   #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted:     #64748B;
+  --shadow-card:    0 1px 3px rgba(0,0,0,0.4);
+  --scrollbar:      rgba(100,116,139,0.35);
+  --accent-blue:    #3B82F6;
+  --accent-green:   #22C55E;
+  --accent-red:     #EF4444;
+  --zebra:          255 255 255;
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+
+  html { transition: background-color 0.3s ease, color 0.3s ease; }
+
+  body {
+    margin: 0;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    overflow-x: hidden;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  #root { width: 100%; min-height: 100vh; }
+
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,0.6); }
+}
+
+@layer components {
+  /* ─── Cards ─────────────────────────────────────────────────────────────── */
+  .glass-card {
+    background: var(--bg-card);
+    border: 1px solid var(--bg-card-border);
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transition: background 0.3s ease, border-color 0.3s ease;
+  }
+
+  .glass-card-hover {
+    @apply glass-card;
+    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.2s ease;
+  }
+  .glass-card-hover:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    border-color: var(--accent-blue);
+  }
+
+  /* ─── Table Pro ──────────────────────────────────────────────────────────── */
+  .table-pro thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg-surface);
+    border-bottom: 2px solid var(--bg-card-border);
+  }
+
+  .table-pro thead th:first-child,
+  .table-pro tbody td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    background: inherit;
+  }
+
+  .table-pro tbody tr:nth-child(even) {
+    background-color: rgba(var(--zebra), 0.04);
+  }
+
+  /* ─── Typography ─────────────────────────────────────────────────────────── */
+  .stat-value {
+    color: var(--text-primary);
+    @apply text-3xl font-bold tracking-tight;
+  }
+
+  .stat-label {
+    color: var(--text-muted);
+    @apply text-xs font-medium uppercase tracking-wider;
+  }
+
+  .section-title {
+    color: var(--text-primary);
+    @apply text-base font-semibold flex items-center gap-2;
+  }
+
+  /* ─── Buttons ────────────────────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 text-white text-sm font-medium rounded-lg
+           transition-all duration-200 active:scale-95 flex items-center gap-2;
+    background: var(--accent-blue);
+  }
+  .btn-primary:hover {
+    background: #2563EB;
+  }
+
+  .btn-ghost {
+    color: var(--text-secondary);
+    @apply px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200
+           flex items-center gap-2;
+  }
+  .btn-ghost:hover {
+    background: rgba(var(--zebra), 0.06);
+    color: var(--text-primary);
+  }
+
+  /* ─── Language button ────────────────────────────────────────────────────── */
+  .lang-btn {
+    @apply px-2 py-1 text-xs font-bold rounded transition-all;
+  }
+  .lang-btn.active {
+    background: var(--accent-blue, #3B82F6);
+    color: white;
+  }
+  .lang-btn:not(.active) {
+    color: var(--text-muted);
+  }
+  .lang-btn:not(.active):hover {
+    color: var(--text-primary);
+  }
+
+  /* ─── Marathon medals ─────────────────────────────────────────────────────── */
+  .marathon-gold   { background: linear-gradient(135deg,rgba(255,215,0,.15),rgba(255,165,0,.08)); border-color: rgba(255,215,0,.4); }
+  .marathon-silver { background: linear-gradient(135deg,rgba(192,192,192,.12),rgba(160,160,160,.06)); border-color: rgba(192,192,192,.35); }
+  .marathon-bronze { background: linear-gradient(135deg,rgba(205,127,50,.12),rgba(180,100,30,.06)); border-color: rgba(205,127,50,.35); }
+}
+
+/* ─── Dark theme marathon medals (solid borders, no gradients) ─────────────── */
+:root.dark .marathon-gold   { background: #1a1500; border-color: #d4a017; }
+:root.dark .marathon-silver { background: #141414; border-color: #94a3b8; }
+:root.dark .marathon-bronze { background: #1a0e00; border-color: #b87333; }
+
+/* ─── TV Mode ──────────────────────────────────────────────────────────────── */
+.tv-mode body { font-size: 1.4rem; }
+.tv-mode ::-webkit-scrollbar { display: none; }
+
+/* ─── Animations ───────────────────────────────────────────────────────────── */
+@keyframes feedSlideIn {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+.feed-item { animation: feedSlideIn 0.4s ease-out; }
+
+@keyframes tickUp {
+  0%   { transform: translateY(6px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.tick-up { animation: tickUp 0.3s ease-out; }
+
+@keyframes trendPop {
+  0%   { transform: scale(0.8); opacity: 0; }
+  60%  { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.trend-pop { animation: trendPop 0.35s ease-out; }
+
+@keyframes rankSlide {
+  from { transform: translateX(-8px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+.rank-slide { animation: rankSlide 0.35s ease-out; }
+
+/* Sync pulse dot */
+@keyframes syncPulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50%     { opacity: .4; transform: scale(.85); }
+}
+.sync-pulse { animation: syncPulse 2s ease-in-out infinite; }
