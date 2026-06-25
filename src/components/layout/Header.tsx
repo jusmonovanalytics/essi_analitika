@@ -230,7 +230,7 @@ export default function Header({ title }: { title: string }) {
             label={t('status_filter')}
             allItems={t('all_items')}
             value={filters.statusFilter ?? ''}
-            onChange={v => setFilter('statusFilter', v || null)}
+            onChange={v => setFilter('statusFilter', v ? [v] : null)}
             options={[
               { value: '1', label: t('status.1') },
               { value: '2', label: t('status.2') },

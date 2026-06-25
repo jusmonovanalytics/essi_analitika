@@ -23,12 +23,6 @@ const API = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://loca
 const RANK_COLORS = ['#F59E0B','#94A3B8','#F97316','#3B82F6','#6366F1','#8B5CF6','#EC4899','#06B6D4']
 const MT_COLORS   = ['#3B82F6','#10B981','#F59E0B','#8B5CF6','#EC4899','#06B6D4','#F97316','#64748B']
 
-const PRESETS: { key: DatePreset; uz: string; ru: string }[] = [
-  { key: 'today',     uz: 'Bugun',   ru: 'Сегодня' },
-  { key: 'yesterday', uz: 'Kecha',   ru: 'Вчера'   },
-  { key: 'week',      uz: 'Hafta',   ru: 'Неделя'  },
-  { key: 'month',     uz: 'Oy',      ru: 'Месяц'   },
-]
 
 // ─── Excel-style multi-select dropdown ───────────────────────────────────────
 
@@ -414,7 +408,7 @@ function HourlyPanel({ data }: { data: HourlyPoint[] }) {
             const isPeak = h === peak.hour
             if (h % 3 !== 0 && !isNow && !isPeak) return <g />
             return (
-              <text x={x} y={y+11} textAnchor="middle"
+              <text x={x} y={(y as number)+11} textAnchor="middle"
                 fontSize={isNow || isPeak ? 10 : 9}
                 fill={isNow ? '#60a5fa' : isPeak ? '#fcd34d' : '#374151'}
                 fontWeight={isNow || isPeak ? 700 : 400}>
@@ -453,7 +447,7 @@ function HourlyPanel({ data }: { data: HourlyPoint[] }) {
         <Bar yAxisId="l" dataKey="order_count" radius={[3,3,0,0]} maxBarSize={24} animationDuration={500}>
           <LabelList dataKey="order_count" position="top"
             style={{ fill:'#4b5563', fontSize:9, fontWeight:700 }}
-            formatter={(v: number) => v >= maxV * 0.44 ? v.toLocaleString() : ''}
+            formatter={(v: unknown) => { const n = Number(v); return n >= maxV * 0.44 ? n.toLocaleString() : '' }}
           />
           {data.map((e,i) => {
             const isCurr  = e.hour === now
@@ -555,7 +549,7 @@ function RegionBars({ data }: { data: RegionalPoint[] }) {
             <XAxis type="number" hide domain={[0, 'dataMax']} />
             <YAxis dataKey="short" type="category" width={130}
               tick={({ x, y, payload, index: idx }) => (
-                <text x={x - 4} y={y} textAnchor="end" dominantBaseline="middle"
+                <text x={(x as number) - 4} y={y} textAnchor="end" dominantBaseline="middle"
                   fontSize={11} fontWeight={idx < 3 ? 600 : 400}
                   fill={idx < 3 ? '#d1d5db' : '#6b7280'}>
                   {payload.value}
@@ -579,7 +573,7 @@ function RegionBars({ data }: { data: RegionalPoint[] }) {
             />
             <Bar dataKey="order_count" radius={[0, 4, 4, 0]}>
               <LabelList
-                content={(props: { x?: number; y?: number; width?: number; height?: number; value?: unknown; index?: number }) => {
+                content={(props: any) => {
                   const { x = 0, y = 0, width = 0, height = 0, value, index = 0 } = props
                   const d = chartData[index]
                   if (!d || !value) return null
