@@ -57,9 +57,10 @@ export default function RegionalChart({ data }: { data: RegionalPoint[] }) {
               dataKey="order_count"
               position="right"
               style={{ fill: '#64748b', fontSize: 10 }}
-              formatter={(v: number) => {
-                const pct = totalOrders > 0 ? ((v / totalOrders) * 100).toFixed(1) : '0'
-                return `${v.toLocaleString()} · ${pct}%`
+              formatter={(v: unknown) => {
+                const n = Number(v)
+                const pct = totalOrders > 0 ? ((n / totalOrders) * 100).toFixed(1) : '0'
+                return `${n.toLocaleString()} · ${pct}%`
               }}
             />
             {top.map((entry, i) => (

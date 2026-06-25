@@ -88,9 +88,10 @@ export default function OrdersByHourChart({ data }: { data: HourlyPoint[] }) {
             dataKey="order_count"
             position="top"
             style={{ fill: '#475569', fontSize: 9 }}
-            formatter={(v: number) => {
+            formatter={(v: unknown) => {
+              const n = Number(v)
               const max = Math.max(...data.map(d => d.order_count), 1)
-              return v > max * 0.35 ? v : ''
+              return n > max * 0.35 ? n : ''
             }}
           />
           {data.map((entry, i) => {

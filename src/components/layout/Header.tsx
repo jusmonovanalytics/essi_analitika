@@ -190,8 +190,8 @@ export default function Header({ title }: { title: string }) {
           <FilterSelect
             label={t('agent_filter')}
             allItems={t('all_items')}
-            value={filters.agentId ? String(filters.agentId) : ''}
-            onChange={v => setFilter('agentId', v ? Number(v) : null)}
+            value={filters.agentId ? String(filters.agentId[0]) : ''}
+            onChange={v => setFilter('agentId', v ? [Number(v)] : null)}
             options={filterOpts?.agents.map(a => ({ value: String(a.user_id), label: a.user_name })) ?? []}
           />
 
@@ -199,8 +199,8 @@ export default function Header({ title }: { title: string }) {
           <FilterSelect
             label={t('region_filter')}
             allItems={t('all_items')}
-            value={filters.region ?? ''}
-            onChange={v => setFilter('region', v || null)}
+            value={filters.region?.[0] ?? ''}
+            onChange={v => setFilter('region', v ? [v] : null)}
             options={filterOpts?.regions.map(r => ({ value: r, label: r })) ?? []}
           />
 
@@ -208,8 +208,8 @@ export default function Header({ title }: { title: string }) {
           <FilterSelect
             label={t('payment_filter')}
             allItems={t('all_items')}
-            value={filters.paymentType ?? ''}
-            onChange={v => setFilter('paymentType', v || null)}
+            value={filters.paymentType?.[0] ?? ''}
+            onChange={v => setFilter('paymentType', v ? [v] : null)}
             options={filterOpts?.payment_types.map(p => ({
               value: p,
               label: p === 'cash' ? t('payment.cash') : p === 'bank' ? t('payment.bank') : t('payment.other'),
@@ -220,8 +220,8 @@ export default function Header({ title }: { title: string }) {
           <FilterSelect
             label={t('delivery_filter')}
             allItems={t('all_items')}
-            value={filters.deliveryManId ? String(filters.deliveryManId) : ''}
-            onChange={v => setFilter('deliveryManId', v ? Number(v) : null)}
+            value={filters.deliveryManId ? String(filters.deliveryManId[0]) : ''}
+            onChange={v => setFilter('deliveryManId', v ? [Number(v)] : null)}
             options={filterOpts?.delivery_men.map(d => ({ value: String(d.delivery_man_id), label: d.delivery_man_name })) ?? []}
           />
 
@@ -229,7 +229,7 @@ export default function Header({ title }: { title: string }) {
           <FilterSelect
             label={t('status_filter')}
             allItems={t('all_items')}
-            value={filters.statusFilter ?? ''}
+            value={filters.statusFilter?.[0] ?? ''}
             onChange={v => setFilter('statusFilter', v ? [v] : null)}
             options={[
               { value: '1', label: t('status.1') },
