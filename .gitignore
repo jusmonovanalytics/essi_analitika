@@ -23,6 +23,8 @@ __pycache__/
 server/backend.log
 
 # Environment variables (never commit secrets)
+.env
+.env.*
 server/.env
 
 # Editor directories and files
