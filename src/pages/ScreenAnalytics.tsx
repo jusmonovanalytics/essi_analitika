@@ -2,7 +2,6 @@ import { useState } from 'react'
 import {
   ComposedChart, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Cell, LabelList, CartesianGrid, Area, ReferenceLine,
-  PieChart, Pie, Cell as PieCell,
 } from 'recharts'
 import {
   RefreshCw, Activity, Wifi, WifiOff, AlertTriangle, X,
@@ -10,18 +9,17 @@ import {
   SlidersHorizontal, CalendarDays,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCharts, useKpis, useDeliveries, useAgents, useChartsExtended } from '../hooks/useAnalytics'
+import { useCharts, useKpis, useDeliveries, useAgents } from '../hooks/useAnalytics'
 import { useAppStore } from '../store/useAppStore'
 import { useT, useLangStore } from '../i18n'
 import { fmtSum } from '../utils/formatters'
-import type { RegionalPoint, MarketTypePoint, HourlyPoint, DeliveryData, KPIData } from '../types/api'
+import type { RegionalPoint, HourlyPoint, DeliveryData, KPIData } from '../types/api'
 import type { DatePreset } from '../types'
 
 const API = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8001'
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const RANK_COLORS = ['#F59E0B','#94A3B8','#F97316','#3B82F6','#6366F1','#8B5CF6','#EC4899','#06B6D4']
-const MT_COLORS   = ['#3B82F6','#10B981','#F59E0B','#8B5CF6','#EC4899','#06B6D4','#F97316','#64748B']
 
 
 // ─── Excel-style multi-select dropdown ───────────────────────────────────────
@@ -600,82 +598,6 @@ function RegionBars({ data }: { data: RegionalPoint[] }) {
   )
 }
 
-// ─── 5. Bozor turi ────────────────────────────────────────────────────────────
-function MarketDonut({ data }: { data: MarketTypePoint[] }) {
-  const total  = data.reduce((s,d) => s+d.order_count, 0)
-  const totalS = data.reduce((s,d) => s+d.total_sum,   0)
-
-  return (
-    <div className="h-full flex gap-2 px-2 py-1">
-      {/* Donut */}
-      <div className="relative" style={{ flex:'0 0 42%', minWidth:0 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <defs>
-              {data.map((_,i) => (
-                <radialGradient key={i} id={`mtG${i}`} cx="50%" cy="50%" r="50%">
-                  <stop offset="0%"   stopColor={MT_COLORS[i%MT_COLORS.length]} />
-                  <stop offset="100%" stopColor={MT_COLORS[i%MT_COLORS.length]} stopOpacity={0.45} />
-                </radialGradient>
-              ))}
-            </defs>
-            <Pie data={data} cx="50%" cy="50%" innerRadius="44%" outerRadius="80%"
-              paddingAngle={2} dataKey="order_count" animationDuration={700} strokeWidth={0}>
-              {data.map((_,i) => <PieCell key={i} fill={`url(#mtG${i})`} />)}
-            </Pie>
-            <Tooltip content={({ active, payload }) => {
-              if (!active || !payload?.[0]) return null
-              const d = payload[0].payload as MarketTypePoint
-              return (
-                <div style={{ background:'rgba(7,16,31,0.97)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:10, padding:'10px 14px', fontSize:13, boxShadow:'0 8px 32px rgba(0,0,0,0.5)', maxWidth:210 }}>
-                  <p style={{ color:'#e2e8f0', fontWeight:700, marginBottom:6, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.market_type}</p>
-                  <p style={{ color:'#f1f5f9', fontWeight:800 }}>📦 {d.order_count.toLocaleString()} ta · {d.share_pct.toFixed(1)}%</p>
-                  <p style={{ color:'#a78bfa', marginTop:4, fontWeight:600 }}>💰 {fmtSum(d.total_sum,true)} so'm</p>
-                </div>
-              )
-            }} />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-lg font-black text-white tabular-nums leading-none">{total.toLocaleString()}</span>
-          <span className="text-xs text-slate-600 mb-1">ta buyurtma</span>
-          <div className="w-8 h-px bg-slate-800" />
-          <span className="text-sm font-bold mt-1 tabular-nums leading-none" style={{ color:'#a78bfa' }}>{fmtSum(totalS,true)}</span>
-          <span className="text-xs text-slate-700">so'm</span>
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="flex-1 min-w-0 flex flex-col min-h-0">
-        <div className="flex items-center gap-2 pb-1.5 mb-1 flex-shrink-0" style={{ borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-          <span className="flex-1 text-xs font-bold text-slate-600 uppercase tracking-wide">Tur</span>
-          <span className="text-xs font-bold text-slate-600 w-8 text-right">%</span>
-          <span className="text-xs font-bold text-slate-600 w-14 text-right">Soni</span>
-          <span className="text-xs font-bold text-slate-600 w-16 text-right">Summa</span>
-        </div>
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
-          {data.map((d,i) => {
-            const c   = MT_COLORS[i%MT_COLORS.length]
-            const pct = total > 0 ? (d.order_count/total)*100 : 0
-            return (
-              <div key={i} className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background:c, boxShadow:`0 0 4px ${c}70` }} />
-                <span className="flex-1 min-w-0 truncate text-xs leading-tight" style={{ color:'rgba(148,163,184,0.8)' }}>{d.market_type}</span>
-                <div className="w-8 h-1.5 rounded-full overflow-hidden bg-slate-900 flex-shrink-0">
-                  <div style={{ width:`${pct}%`, height:'100%', background:c, borderRadius:9999 }} />
-                </div>
-                <span className="text-xs font-bold tabular-nums w-8 text-right flex-shrink-0" style={{ color:c }}>{pct.toFixed(0)}%</span>
-                <span className="text-xs font-semibold tabular-nums w-14 text-right flex-shrink-0" style={{ color:'#e2e8f0' }}>{d.order_count.toLocaleString()}</span>
-                <span className="text-xs tabular-nums w-16 text-right flex-shrink-0" style={{ color:'#8b5cf6' }}>{fmtSum(d.total_sum,true)}</span>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ScreenAnalytics({ onGoToData }: { onGoToData?: () => void }) {
   const t = useT()
@@ -684,7 +606,7 @@ export default function ScreenAnalytics({ onGoToData }: { onGoToData?: () => voi
   const { data: kpis  }             = useKpis()
   const { data: agents = [] }       = useAgents()
   const { data: deliveries = [] }   = useDeliveries()
-  const { data: ext   }             = useChartsExtended()
+
 
   const agentRows: RankedRow[] = agents.map((a, i) => ({
     name:   a.user_name.split(' ')[0],
@@ -744,7 +666,7 @@ export default function ScreenAnalytics({ onGoToData }: { onGoToData?: () => voi
         <div className="flex-1 min-h-0 p-2 grid gap-2" style={{
           gridTemplateColumns: '2.8fr 2fr 2fr',
           gridTemplateRows:    '44% 56%',
-          gridTemplateAreas:   '"soat agnt dlvr" "rmap rmap bozr"',
+          gridTemplateAreas:   '"soat agnt dlvr" "rmap agnt dlvr"',
         }}>
 
           <div style={cell('soat')}>
@@ -782,12 +704,6 @@ export default function ScreenAnalytics({ onGoToData }: { onGoToData?: () => voi
             <Panel title={t('chart.regional_title')} accent="#38BDF8"
               hint={<Hint cnt={regTot} sm={regSum} cc="#38bdf8" sc="#34d399" />}>
               <RegionBars data={regD} />
-            </Panel>
-          </div>
-
-          <div style={cell('bozr')}>
-            <Panel title={t('chart.market_type_title')} accent="#8B5CF6">
-              <MarketDonut data={ext?.market_types ?? []} />
             </Panel>
           </div>
 
