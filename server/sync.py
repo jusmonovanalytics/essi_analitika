@@ -61,12 +61,11 @@ async def sync_range(
     # RITM API uses begin_date/end_date for created_date range.
     # For date_delivery, use the delivery-specific params.
     if date_field == "created_date":
-        params = {"begin_date": date_from, "end_date": date_to, "exclude_cancelled": "True"}
+        params = {"begin_date": date_from, "end_date": date_to}
     else:
         params = {
             f"{date_field}__gte": date_from,
             f"{date_field}__lte": date_to,
-            "exclude_cancelled": "True",
         }
 
     total_new  = 0

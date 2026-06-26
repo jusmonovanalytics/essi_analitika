@@ -101,8 +101,22 @@ async def init_db():
 
 async def upsert_orders(orders: list[dict]) -> tuple[int, int]:
     """Insert new orders, update only if status/price/delivery changed.
+    Status=4 (cancelled) orders: update existing records but never insert new ones.
     Returns (new_or_changed, skipped_unchanged).
     """
+    if not orders:
+        return 0, 0
+
+    cancelled_ids = [o["id"] for o in orders if str(o.get("status", "")) == "4"]
+    if cancelled_ids:
+        pool = await get_pool()
+        async with pool.connection() as conn:
+            await conn.execute(
+                "UPDATE orders_cache SET status = '4', synced_at = NOW() WHERE id = ANY(%s) AND status != '4'",
+                [cancelled_ids]
+            )
+            await conn.commit()
+
     orders = [o for o in orders if str(o.get("status", "")) != "4"]
     if not orders:
         return 0, 0
