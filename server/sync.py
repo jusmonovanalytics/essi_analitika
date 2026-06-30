@@ -139,4 +139,9 @@ async def sync_loop(on_done: OnSyncDone = None):
         await asyncio.sleep(SYNC_INTERVAL)
         today = datetime.now().strftime("%Y-%m-%d")
         logger.info(f"Auto-sync: today ({today})")
-        await sync_range(today, today, "created_date", on_done)
+        try:
+            await sync_range(today, today, "created_date", on_done)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"Auto-sync failed, will retry in {SYNC_INTERVAL}s: {e}")
