@@ -20,12 +20,13 @@ _pool: Optional[AsyncConnectionPool] = None
 async def get_pool() -> AsyncConnectionPool:
     global _pool
     if _pool is None:
-        # statement_timeout=8000ms: protects against runaway queries on large date ranges
         _pool = AsyncConnectionPool(
             DB_URL,
-            min_size=2,
-            max_size=15,
+            min_size=1,
+            max_size=10,
             open=False,
+            check=AsyncConnectionPool.check_connection,
+            reconnect_timeout=30,
         )
         await _pool.open()
     return _pool
