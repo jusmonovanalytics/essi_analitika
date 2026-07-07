@@ -72,6 +72,7 @@ async def sync_range(
     total_skip = 0
     page = 1
     empty_pages = 0
+    fetch_error: Exception | None = None
 
     logger.info(f"Sync start: {date_field} [{date_from} → {date_to}]")
 
@@ -81,6 +82,7 @@ async def sync_range(
                 try:
                     data = await _fetch_page(client, page, params)
                 except Exception as e:
+                    fetch_error = e
                     logger.error(f"Sync stopped at page {page}: {type(e).__name__}: {e}")
                     break
 
@@ -107,6 +109,10 @@ async def sync_range(
                 if not data.get("next"):
                     break
                 page += 1
+
+        if fetch_error and page == 1:
+            # Failed on very first page — nothing was fetched
+            raise fetch_error
 
         logger.info(
             f"Sync done [{date_from}→{date_to}]: "

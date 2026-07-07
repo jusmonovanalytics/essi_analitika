@@ -39,6 +39,8 @@ import sync as syncer
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("main")
 
+DISABLE_SYNC = os.getenv("DISABLE_SYNC", "").lower() in ("1", "true", "yes")
+
 
 # ─── WebSocket manager ────────────────────────────────────────────────────────
 
@@ -107,9 +109,11 @@ async def lifespan(_app: FastAPI):
     except Exception as e:
         logger.error(f"Analytics setup failed: {e}")
 
-    # Start today's auto-sync ONLY if today's data is already in DB.
-    # Historical data is always loaded manually via /data page.
-    await _maybe_start_today_autosync()
+    if DISABLE_SYNC:
+        logger.info("Sync disabled via DISABLE_SYNC env var (cloud deployment mode)")
+    else:
+        # Start today's auto-sync ONLY if today's data is already in DB.
+        await _maybe_start_today_autosync()
 
     yield
 
