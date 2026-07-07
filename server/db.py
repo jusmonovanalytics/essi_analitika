@@ -22,7 +22,7 @@ async def get_pool() -> AsyncConnectionPool:
     if _pool is None:
         # statement_timeout=8000ms: protects against runaway queries on large date ranges
         _pool = AsyncConnectionPool(
-            DB_URL + "?options=-c%20statement_timeout%3D8000",
+            DB_URL,
             min_size=2,
             max_size=15,
             open=False,

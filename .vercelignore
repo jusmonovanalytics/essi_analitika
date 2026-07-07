@@ -1,0 +1,13 @@
+node_modules
+server
+.env
+.env.local
+*.exe
+*.log
+*.sql
+*.sql.gz
+cf_tunnel.log
+cf_url.log
+cf_out.log
+cf_err.log
+start_tunnel.bat
