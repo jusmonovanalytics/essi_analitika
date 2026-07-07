@@ -47,18 +47,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_daily_day ON mv_daily_totals (day);
 -- All filter params use arrays so callers can pass multiple values.
 -- Pass NULL to skip a filter, pass an array to restrict to those values.
 
--- Drop old single-value overloads so CREATE OR REPLACE works cleanly.
-DROP FUNCTION IF EXISTS fn_kpis CASCADE;
-DROP FUNCTION IF EXISTS fn_agent_stats CASCADE;
-DROP FUNCTION IF EXISTS fn_delivery_stats CASCADE;
-DROP FUNCTION IF EXISTS fn_hourly_stats CASCADE;
-DROP FUNCTION IF EXISTS fn_daily_stats CASCADE;
-DROP FUNCTION IF EXISTS fn_regional_stats CASCADE;
-DROP FUNCTION IF EXISTS fn_client_stats CASCADE;
-DROP FUNCTION IF EXISTS fn_payment_stats CASCADE;
-DROP FUNCTION IF EXISTS fn_weekday_stats CASCADE;
-DROP FUNCTION IF EXISTS fn_market_type_stats CASCADE;
-DROP FUNCTION IF EXISTS fn_delivery_extended CASCADE;
+-- Drop all overloads of analytics functions (handles multiple signatures cleanly).
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN
+    SELECT oid::regprocedure::text AS sig FROM pg_proc
+    WHERE proname = ANY(ARRAY[
+      'fn_kpis','fn_agent_stats','fn_delivery_stats','fn_hourly_stats',
+      'fn_daily_stats','fn_regional_stats','fn_client_stats','fn_payment_stats',
+      'fn_weekday_stats','fn_market_type_stats','fn_delivery_extended'
+    ])
+    AND pronamespace = 'public'::regnamespace
+  LOOP
+    EXECUTE 'DROP FUNCTION IF EXISTS ' || r.sig || ' CASCADE';
+  END LOOP;
+END $$;
 
 -- ─── KPI Summary ─────────────────────────────────────────────────────────────
 CREATE FUNCTION fn_kpis(
