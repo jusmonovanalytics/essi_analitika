@@ -45,7 +45,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_daily_day ON mv_daily_totals (day);
 
 -- ─── Analytics Functions ──────────────────────────────────────────────────────
 -- All filter params use arrays so callers can pass multiple values.
--- Pass NULL to skip a filter; pass an array to restrict to those values.
+-- Pass NULL to skip a filter, pass an array to restrict to those values.
 
 -- Drop old single-value overloads so CREATE OR REPLACE works cleanly.
 DROP FUNCTION IF EXISTS fn_kpis CASCADE;
