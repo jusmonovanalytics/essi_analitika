@@ -9,7 +9,7 @@ echo  ============================================
 echo.
 echo  [1/5] Eski jarayonlar toxtatilmoqda...
 taskkill /F /IM cloudflared.exe /T 2>nul
-taskkill /F /IM python.exe /T 2>nul
+for /f "tokens=5" %%a in ('netstat -aon ^| find "8001" ^| find "LISTENING"') do taskkill /F /PID %%a /T 2>nul
 ping -n 3 127.0.0.1 >nul
 echo  [2/5] Backend (FastAPI) ishga tushirilmoqda...
 start "ESSI Backend" /min python "D:\ESSI\server\run.py"
