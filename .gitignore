@@ -12,9 +12,19 @@ dist
 dist-ssr
 *.local
 
-# Database backups
+# Database backups / dumps
 essi_backup.sql
+essi_neon_export.sql
+neon_*.sql
 *.sql.gz
+
+# Xom Excel hisobotlari — PostgreSQL ga yuklangan, kodda kerak emas (~244 MB).
+# Modelning manbasi bazadagi fakt_savdo / yakuniy_savdo jadvallari.
+essi/fakt savdo/
+essi/yakuniy savdo/
+
+# Tunnel dasturi — mashinaga bog'liq ikkilik fayl (52 MB)
+cloudflared.exe
 
 # Python
 __pycache__/

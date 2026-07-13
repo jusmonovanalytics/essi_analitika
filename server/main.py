@@ -35,6 +35,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import db
 import db_analytics as analytics
 import sync as syncer
+import prognoz
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger("main")
@@ -109,6 +110,13 @@ async def lifespan(_app: FastAPI):
     except Exception as e:
         logger.error(f"Analytics setup failed: {e}")
 
+    # Prognoz: sxema + model (qayta ishga tushirish xavfsiz — ma'lumotga tegmaydi)
+    try:
+        await prognoz.db.setup()
+        logger.info("Prognoz layer ready")
+    except Exception as e:
+        logger.error(f"Prognoz setup failed: {e}")
+
     if DISABLE_SYNC:
         logger.info("Sync disabled via DISABLE_SYNC env var (cloud deployment mode)")
     else:
@@ -140,6 +148,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─── Savdo prognozi (/api/prognoz/*) ──────────────────────────────────────────
+
+app.include_router(prognoz.router)
 
 
 # ─── Common filter params ─────────────────────────────────────────────────────

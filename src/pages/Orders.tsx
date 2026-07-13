@@ -6,7 +6,7 @@ import { useKpis } from '../hooks/useAnalytics'
 import { fmtSum } from '../utils/formatters'
 import type { Order } from '../types'
 
-const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8001'
+const BASE = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
 const PAGE_SIZE = 100
 
 function useOrdersData(

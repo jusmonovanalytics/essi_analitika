@@ -4,7 +4,7 @@ import type {
   ExtendedChartsData, DeliveryExtData,
 } from '../types/api'
 
-const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8001'
+const BASE = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
 
 async function get<T>(path: string, params: Record<string, string | number | undefined | null> = {}): Promise<T> {
   const q = new URLSearchParams()

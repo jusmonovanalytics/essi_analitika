@@ -16,7 +16,7 @@ import { fmtSum } from '../utils/formatters'
 import type { RegionalPoint, HourlyPoint, DeliveryData, KPIData } from '../types/api'
 import type { DatePreset } from '../types'
 
-const API = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8001'
+const API = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const RANK_COLORS = ['#F59E0B','#94A3B8','#F97316','#3B82F6','#6366F1','#8B5CF6','#EC4899','#06B6D4']

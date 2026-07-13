@@ -1,0 +1,1641 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESSI — Savdo prognozi</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --surface-1: #fcfcfb;
+    --surface-2: #f4f4f1;
+    --page: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --fakt: #2a78d6;         /* ko'k — haqiqiy sotuv */
+    --prognoz: #eb6834;      /* to'q sariq — prognoz */
+    --band: rgba(235,104,52,0.16);
+    --good: #0ca30c;
+    --warning: #fab219;
+    --critical: #d03b3b;
+    --good-text: #006300;
+    --shadow: 0 1px 2px rgba(11,11,11,.04), 0 4px 12px rgba(11,11,11,.04);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-1: #1a1a19;
+      --surface-2: #242422;
+      --page: #0d0d0d;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255,255,255,0.10);
+      --fakt: #3987e5;
+      --prognoz: #d95926;
+      --band: rgba(217,89,38,0.22);
+      --good-text: #0ca30c;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.2);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text-primary);
+    font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  }
+
+  /* ================= Yuqori panel ================= */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+    backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-in {
+    max-width: 1320px; margin: 0 auto; padding: 0 22px;
+    display: flex; align-items: center; gap: 22px; height: 58px;
+  }
+  .brand { display: flex; align-items: center; gap: 9px; flex: none; }
+  .brand .mark {
+    width: 26px; height: 26px; border-radius: 7px; flex: none;
+    background: var(--prognoz); color: #fff; font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; letter-spacing: -0.02em;
+  }
+  .brand .nm { font-weight: 650; font-size: 15px; letter-spacing: -0.01em; }
+  .brand .sfx { color: var(--text-muted); font-weight: 450; font-size: 13px; }
+
+  nav { display: flex; gap: 2px; }
+  nav a {
+    padding: 6px 13px; border-radius: 8px; font-size: 13.5px; font-weight: 550;
+    color: var(--text-secondary); text-decoration: none; white-space: nowrap;
+  }
+  nav a:hover { background: var(--surface-2); color: var(--text-primary); }
+  nav a.on { background: color-mix(in srgb, var(--fakt) 13%, transparent); color: var(--fakt); }
+
+  .topbar .spacer { flex: 1; }
+  .topbar .meta { font-size: 12px; color: var(--text-muted); text-align: right; line-height: 1.35; }
+  @media (max-width: 720px) { .topbar .meta { display: none; } }
+
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 22px 22px 90px; }
+  .view { display: none; }
+  .view.on { display: block; }
+
+  /* ================= Sarlavhalar ================= */
+  .page-hd { margin-bottom: 18px; }
+  .page-hd h1 { font-size: 21px; margin: 0 0 3px; font-weight: 650; letter-spacing: -0.015em; }
+  .page-hd p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+
+  /* ================= Kartalar ================= */
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .card > h2 {
+    font-size: 14.5px; margin: 0 0 2px; font-weight: 620; letter-spacing: -0.005em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card .note { color: var(--text-muted); font-size: 12.5px; margin: 0 0 14px; }
+  .card .note:last-child { margin-bottom: 0; }
+
+  /* ================= Filtrlar ================= */
+  .toolbar {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
+    padding: 13px 16px; background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .fld { display: flex; flex-direction: column; gap: 4px; }
+  .fld label {
+    font-size: 10.5px; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: .05em; font-weight: 600;
+  }
+  select, input[type=number], input[type=search] {
+    font: inherit; font-size: 13px; padding: 6px 9px; border-radius: 8px;
+    border: 1px solid var(--axis); background: var(--surface-1); color: var(--text-primary);
+    min-height: 33px;
+  }
+  select:focus, input:focus { outline: 2px solid var(--fakt); outline-offset: -1px; border-color: var(--fakt); }
+  button {
+    font: inherit; font-size: 13px; font-weight: 560; padding: 7px 15px; border-radius: 8px;
+    border: 1px solid var(--fakt); background: var(--fakt); color: #fff; cursor: pointer;
+    min-height: 33px; white-space: nowrap;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.07); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: transparent; color: var(--text-secondary); border-color: var(--axis); }
+  button.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text-primary); filter: none; }
+  button.danger { background: var(--critical); border-color: var(--critical); }
+  /* Qatordagi kichik o'chirish tugmasi */
+  button.del {
+    background: transparent; border: 1px solid var(--axis); color: var(--text-muted);
+    padding: 3px 9px; min-height: 26px; font-size: 12px; border-radius: 6px; font-weight: 500;
+  }
+  button.del:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--critical) 12%, transparent);
+    border-color: var(--critical); color: var(--critical); filter: none;
+  }
+  .grow { flex: 1; }
+
+  /* ================= Ko'rsatkich kartalari ================= */
+  .tiles { display: grid; gap: 13px; margin-bottom: 16px; }
+  .tiles.c4 { grid-template-columns: 1.3fr 1fr 1fr 1fr; }
+  .tiles.c3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 940px) { .tiles.c4, .tiles.c3 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .tiles.c4, .tiles.c3 { grid-template-columns: 1fr; } }
+  /* Svod jadval: qo'lda tahrirlash */
+  .pv-cell { cursor: text; outline: none; }
+  .pv-cell:hover { box-shadow: inset 0 0 0 1px var(--fakt); }
+  .pv-cell:focus {
+    box-shadow: inset 0 0 0 2px var(--fakt);
+    background: color-mix(in srgb, var(--fakt) 8%, transparent) !important;
+  }
+  .pv-cell.edited {                       /* saqlangan qo'lda o'zgarish */
+    background: color-mix(in srgb, var(--prognoz) 20%, var(--surface-1)) !important;
+    box-shadow: inset 2px 0 0 var(--prognoz);
+    font-weight: 660;
+  }
+  .pv-cell.dirty {                        /* saqlanmagan o'zgarish */
+    background: color-mix(in srgb, var(--warning) 42%, var(--surface-1)) !important;
+    box-shadow: inset 2px 0 0 var(--warning);
+    font-weight: 700;
+  }
+  .pv-cell.dirty::after {
+    content: '•'; color: var(--warning); margin-left: 4px; font-size: 15px;
+  }
+  .edit-bar {
+    display: none; align-items: center; gap: 11px; flex-wrap: wrap;
+    margin: 12px 0; padding: 12px 15px; border-radius: 10px;
+    background: color-mix(in srgb, var(--warning) 10%, var(--surface-1));
+    border: 1px solid color-mix(in srgb, var(--warning) 42%, transparent);
+  }
+  .edit-bar.on { display: flex; }
+  .edit-bar .eb-info { font-size: 13.5px; }
+  .edit-bar input {
+    flex: 1 1 240px; min-width: 180px; padding: 7px 11px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface-1); color: var(--text);
+  }
+  .edit-bar button.ghost {
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+
+  /* Yuklash: manba tanlash */
+  .up-src { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 13px; }
+  .up-src label {
+    flex: 1 1 190px; display: flex; align-items: flex-start; gap: 9px;
+    padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface-1); cursor: pointer; transition: .12s;
+  }
+  .up-src label:hover { border-color: var(--fakt); }
+  .up-src label:has(input:checked) {
+    border-color: var(--fakt);
+    background: color-mix(in srgb, var(--fakt) 7%, transparent);
+  }
+  .up-src input { margin-top: 2px; accent-color: var(--fakt); }
+  .up-src span { display: flex; flex-direction: column; line-height: 1.35; }
+  .up-src b { font-size: 13.5px; font-weight: 600; }
+  .up-src em {
+    font-style: normal; font-size: 11.5px; color: var(--text-muted); margin-top: 1px;
+  }
+  .up-tag {
+    display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10.5px;
+    font-weight: 650; letter-spacing: .02em; margin-left: 6px;
+  }
+  .up-tag.fakt { background: color-mix(in srgb, var(--fakt) 16%, transparent); color: var(--fakt); }
+  .up-tag.yakuniy { background: color-mix(in srgb, var(--prognoz) 16%, transparent); color: var(--prognoz); }
+
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 15px 17px; box-shadow: var(--shadow);
+  }
+  .tile .k {
+    font-size: 10.5px; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: .05em; font-weight: 600;
+  }
+  .tile .v { font-size: 26px; font-weight: 640; margin-top: 6px; letter-spacing: -0.025em; }
+  .tile.hero .v { font-size: 38px; color: var(--prognoz); }
+  .tile .u { font-size: 13px; color: var(--text-secondary); font-weight: 450; margin-left: 5px; }
+  .tile .d { font-size: 12px; color: var(--text-secondary); margin-top: 5px; }
+  .up { color: var(--good-text); font-weight: 600; }
+  .dn { color: var(--critical); font-weight: 600; }
+
+  /* ================= Grafik ================= */
+  .chart-box { position: relative; }
+  svg { display: block; width: 100%; overflow: visible; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .axisline { stroke: var(--axis); stroke-width: 1; }
+  .tick { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .lbl { fill: var(--text-secondary); font-size: 11px; font-weight: 550; }
+  .legend {
+    display: flex; gap: 16px; align-items: center; font-size: 12px;
+    color: var(--text-secondary); margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+  .tip {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity .12s;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 11px; font-size: 12px; box-shadow: 0 4px 18px rgba(0,0,0,.16);
+    white-space: nowrap; z-index: 20;
+  }
+  .tip .t { font-weight: 600; margin-bottom: 4px; }
+  .tip .r { display: flex; gap: 12px; justify-content: space-between; }
+  .tip .r span:last-child { font-variant-numeric: tabular-nums; font-weight: 550; }
+
+  /* ================= Oddiy jadval ================= */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--grid); border-radius: 10px; }
+  table.data { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.data th, table.data td {
+    padding: 8px 11px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap;
+  }
+  table.data tr:last-child td { border-bottom: none; }
+  table.data th {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--text-muted); font-weight: 600; background: var(--surface-2);
+    position: sticky; top: 0; z-index: 1;
+  }
+  table.data td { font-variant-numeric: tabular-nums; }
+  table.data .l { text-align: left; }
+  table.data tbody tr:hover { background: color-mix(in srgb, var(--fakt) 6%, transparent); }
+  .chip {
+    font-size: 11px; padding: 2px 8px; border-radius: 20px;
+    background: color-mix(in srgb, var(--fakt) 13%, transparent);
+    color: var(--text-secondary); white-space: nowrap; display: inline-block;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+  .acc { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* ================= Svod (pivot) jadval ================= */
+  .pivot-wrap { overflow: auto; max-height: 76vh; border: 1px solid var(--grid); border-radius: 10px; }
+  table.pivot {
+    border-collapse: separate; border-spacing: 0; font-size: 13px;
+    table-layout: fixed; width: auto;   /* kenglik JS'da aniq beriladi */
+  }
+  table.pivot th, table.pivot td {
+    border: none; border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
+    padding: 6px 10px; white-space: nowrap;
+  }
+  table.pivot thead th {
+    position: sticky; background: var(--surface-2); z-index: 3;
+    font-size: 10.5px; font-weight: 620; color: var(--text-secondary);
+    text-align: center; padding: 6px 4px; overflow: hidden; text-overflow: ellipsis;
+  }
+  table.pivot thead tr:nth-child(1) th { top: 0; }
+  table.pivot thead tr:nth-child(2) th {
+    top: 25px; font-variant-numeric: tabular-nums;
+    color: var(--text-muted); font-weight: 550; font-size: 11px;
+  }
+  table.pivot .pname {
+    position: sticky; left: 0; z-index: 2; background: var(--surface-1);
+    text-align: left; white-space: normal; line-height: 1.35;
+    border-right: 2px solid var(--axis);
+  }
+  table.pivot thead .pname {
+    z-index: 4; background: var(--surface-2);
+    font-size: 12px; text-align: left; padding: 6px 10px;
+  }
+  table.pivot tbody td { text-align: right; font-variant-numeric: tabular-nums; }
+  table.pivot tbody tr { cursor: pointer; }
+  table.pivot tbody tr:hover td { background: color-mix(in srgb, var(--fakt) 8%, transparent); }
+  table.pivot tbody tr:hover .pname { background: color-mix(in srgb, var(--fakt) 12%, var(--surface-1)); }
+  table.pivot .mon { background: color-mix(in srgb, var(--fakt) 5%, transparent); }
+  table.pivot thead .mon { background: color-mix(in srgb, var(--fakt) 10%, var(--surface-2)); }
+  table.pivot .sun { background: color-mix(in srgb, var(--text-muted) 8%, transparent); }
+  table.pivot .sun-cell { color: var(--text-muted); text-align: center; }
+  table.pivot .tot {
+    font-weight: 650; color: var(--prognoz);
+    background: color-mix(in srgb, var(--prognoz) 7%, transparent);
+    border-left: 2px solid var(--axis);
+  }
+  table.pivot thead .tot { background: color-mix(in srgb, var(--prognoz) 12%, var(--surface-2)); color: var(--prognoz); }
+  table.pivot tfoot td {
+    position: sticky; bottom: 0; z-index: 2;
+    background: var(--surface-1); font-weight: 650;
+    border-top: 2px solid var(--axis); text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  table.pivot tfoot .pname { z-index: 3; text-align: left; }
+  /* Yopishqoq JAMI qatori shaffofmas bo'lishi SHART — aks holda ostidagi qatorlar ko'rinadi */
+  table.pivot tfoot .mon { background: color-mix(in srgb, var(--fakt) 8%, var(--surface-1)); }
+  table.pivot tfoot .sun { background: color-mix(in srgb, var(--text-muted) 10%, var(--surface-1)); }
+  table.pivot tfoot .tot { background: color-mix(in srgb, var(--prognoz) 10%, var(--surface-1)); }
+  table.pivot .zero { color: var(--text-muted); }
+  .pv-type { font-size: 11px; color: var(--text-muted); display: block; margin-top: 1px; }
+
+  /* ================= Bildirishnoma ================= */
+  .banner {
+    padding: 11px 14px; border-radius: 9px; font-size: 12.5px; margin-bottom: 14px;
+    background: color-mix(in srgb, var(--warning) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+  }
+  .banner.info {
+    background: color-mix(in srgb, var(--fakt) 10%, transparent);
+    border-color: color-mix(in srgb, var(--fakt) 35%, transparent);
+  }
+
+  /* ================= Fayl yuklash ================= */
+  .drop {
+    border: 2px dashed var(--axis); border-radius: 11px;
+    padding: 30px 20px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over {
+    border-color: var(--fakt);
+    background: color-mix(in srgb, var(--fakt) 6%, transparent);
+  }
+  .drop.busy { opacity: .55; pointer-events: none; }
+  .drop-ico { font-size: 28px; margin-bottom: 7px; }
+  .drop-sub { font-size: 12.5px; color: var(--text-secondary); margin-top: 5px; }
+  button.link {
+    background: none; border: none; color: var(--fakt); font: inherit; font-size: 12.5px;
+    text-decoration: underline; cursor: pointer; padding: 0; min-height: auto;
+  }
+  .chk {
+    display: flex; align-items: flex-start; gap: 8px; margin-top: 13px;
+    font-size: 13px; color: var(--text-secondary); cursor: pointer;
+  }
+  .chk input { margin-top: 2px; }
+  .chk em { color: var(--text-muted); font-style: normal; font-size: 12px; }
+  .up-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 11px;
+    border-radius: 8px; font-size: 13px; margin-top: 6px;
+  }
+  .up-row .f { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .up-row .n { font-variant-numeric: tabular-nums; color: var(--text-secondary); white-space: nowrap; }
+  .up-ok   { background: color-mix(in srgb, var(--good) 13%, transparent); }
+  .up-skip { background: color-mix(in srgb, var(--warning) 15%, transparent); }
+  .up-err  { background: color-mix(in srgb, var(--critical) 13%, transparent); }
+  .up-badge { font-weight: 620; font-size: 10.5px; letter-spacing: .03em; white-space: nowrap; }
+
+  /* ================= Modal ================= */
+  .modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 60;
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal.on { display: flex; }
+  .modal-in {
+    background: var(--surface-1); border-radius: 13px; padding: 22px 24px;
+    max-width: 960px; width: 100%; max-height: 88vh; overflow-y: auto;
+    border: 1px solid var(--border); box-shadow: 0 12px 48px rgba(0,0,0,.3);
+  }
+  .modal-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+  .x {
+    background: none; border: none; color: var(--text-secondary); font-size: 22px;
+    cursor: pointer; padding: 0 6px; min-height: auto;
+  }
+  .x:hover { color: var(--text-primary); filter: none; }
+  .sub { color: var(--text-secondary); font-size: 13px; }
+
+  details summary { cursor: pointer; font-size: 12.5px; color: var(--text-secondary); }
+  details summary:hover { color: var(--text-primary); }
+  .fade { opacity: .45; transition: opacity .15s; }
+  .empty { padding: 34px; text-align: center; color: var(--text-muted); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <div class="mark">E</div>
+      <div><span class="nm">ESSI</span> <span class="sfx">Prognoz</span></div>
+    </div>
+    <nav>
+      <a href="#prognoz"   id="nav-prognoz">Savdo prognozi</a>
+      <a href="#malumotlar" id="nav-malumotlar">Ma'lumotlarni boshqarish</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="meta" id="topmeta"></div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ==================== 1-BO'LIM: PROGNOZ ==================== -->
+  <section class="view" id="v-prognoz">
+    <div class="page-hd">
+      <h1>2 haftalik savdo prognozi</h1>
+      <p id="plan-sub">Yuklanmoqda…</p>
+    </div>
+
+    <div class="toolbar">
+      <div class="fld">
+        <label for="f-type">Mahsulot turi</label>
+        <select id="f-type"><option value="">Hammasi</option></select>
+      </div>
+      <div class="fld">
+        <label for="f-dokon">Do'kon turi</label>
+        <select id="f-dokon"><option value="">Hammasi (jami reja)</option></select>
+      </div>
+      <div class="fld" id="fld-usul" style="display:none">
+        <label for="f-usul">Usul</label>
+        <select id="f-usul">
+          <option value="aralash">Aralash — 25.1%</option>
+          <option value="taqsimot">Taqsimot — 25.5%</option>
+          <option value="alohida">Alohida prognoz — 25.4%</option>
+        </select>
+      </div>
+      <div class="fld">
+        <label for="f-round">Yaxlitlash</label>
+        <select id="f-round">
+          <option value="1">Yaxlitlashsiz</option>
+          <option value="10">10 ga</option>
+          <option value="50" selected>50 ga</option>
+          <option value="100">100 ga</option>
+        </select>
+      </div>
+      <div class="grow"></div>
+      <div class="fld">
+        <label for="f-hor">Gorizont</label>
+        <select id="f-hor">
+          <option value="6">6 kun (1 hafta)</option>
+          <option value="12" selected>12 kun (2 hafta)</option>
+          <option value="18">18 kun (3 hafta)</option>
+        </select>
+      </div>
+      <div class="fld">
+        <label for="f-adj">Zaxira ustamasi</label>
+        <input type="number" id="f-adj" value="1.00" step="0.01" min="0.5" max="1.5" style="width:90px">
+      </div>
+      <button id="btn-recalc">Qayta hisoblash</button>
+    </div>
+
+
+    <div class="card">
+      <h2>Svod jadval</h2>
+      <div id="dokon-note"></div>
+      <div id="edit-msg"></div>
+
+      <div class="edit-bar" id="edit-bar">
+        <div class="eb-info">
+          <b id="edit-count">0</b> ta hujayra o'zgartirildi ·
+          jami <b id="edit-delta">0</b> dona
+        </div>
+        <input type="text" id="edit-izoh" placeholder="Izoh (ixtiyoriy) — arxivda ko'rinadi"
+               autocomplete="off">
+        <button class="ghost" id="btn-edit-reset">Bekor qilish</button>
+        <button id="btn-edit-save">Yangi versiya sifatida saqlash</button>
+      </div>
+      <div class="pivot-wrap"><table id="t-pivot" class="pivot"></table></div>
+      <p class="note" style="margin:11px 0 0">Mahsulot qatoriga bosib tarix, prognoz grafigi va aniqligini ko'ring.</p>
+    </div>
+
+    <div class="card">
+      <h2>Hafta kuni bo'yicha mavsumiylik</h2>
+      <p class="note">Butun tarix bo'yicha o'rtacha kunlik hajm. Yakshanba savdo yo'q — reja Dushanba–Shanba kunlariga tuziladi.</p>
+      <div class="chart-box"><svg id="c-dow" height="200"></svg><div class="tip" id="tip-dow"></div></div>
+    </div>
+  </section>
+
+  <!-- ==================== 2-BO'LIM: MA'LUMOTLAR ==================== -->
+  <section class="view" id="v-malumotlar">
+    <div class="page-hd">
+      <h1>Ma'lumotlarni boshqarish</h1>
+      <p>Savdo hisobotlarini yuklash, bazaning holatini ko'rish va prognoz tarixini kuzatish.</p>
+    </div>
+
+    <div class="tiles c4" id="db-tiles"></div>
+
+    <div class="card">
+      <h2>Yangi hisobot yuklash</h2>
+      <p class="note">
+        Excel hisobotlarini (.xlsx) sudrab tashlang yoki tanlang. Bir vaqtda bir nechta fayl bo'lishi mumkin.
+        Sana faylning <b>ichidan</b> o'qiladi — fayl nomi ahamiyatsiz.
+      </p>
+
+      <div class="banner" style="margin-bottom:14px">
+        <b>Ikki manba:</b>
+        <b>Fakt savdo</b> — kunlik hisobot, bitta kun (talab: mijoz nima so'ragan).
+        <b>Yakuniy savdo</b> — haftalik hisobot, bir necha kun (ombor kesimidan keyin
+        nima yetkazilgan). Ustunlar ikkalasida bir xil, shuning uchun
+        <b>manbani o'zingiz tanlaysiz</b>.
+      </div>
+
+      <div class="up-src">
+        <label><input type="radio" name="manba" value="fakt" checked>
+          <span><b>Fakt savdo</b><em>bitta kun — talab</em></span></label>
+        <label><input type="radio" name="manba" value="yakuniy">
+          <span><b>Yakuniy savdo</b><em>bir necha kun — sotilgan</em></span></label>
+      </div>
+
+      <div id="drop" class="drop">
+        <input type="file" id="file-input" accept=".xlsx,.xlsm" multiple hidden>
+        <div class="drop-ico">📥</div>
+        <div><b>Fayllarni shu yerga tashlang</b></div>
+        <div class="drop-sub">yoki <button type="button" class="link" id="btn-pick">kompyuterdan tanlang</button></div>
+      </div>
+      <label class="chk">
+        <input type="checkbox" id="chk-replace">
+        <span>Allaqachon yuklangan ma'lumotni qayta yozish
+          <em>(belgilanmasa, u o'tkazib yuboriladi — dublikat oldini olinadi)</em></span>
+      </label>
+      <div id="up-result"></div>
+    </div>
+
+    <div class="card">
+      <h2>Yuklangan ma'lumot</h2>
+      <p class="note">Manbani tanlang — har birini alohida ko'rish va o'chirish mumkin.</p>
+
+      <div class="up-src" style="margin-bottom:13px">
+        <label><input type="radio" name="ko-manba" value="fakt" checked>
+          <span><b>Fakt savdo</b><em>kun bo'yicha</em></span></label>
+        <label><input type="radio" name="ko-manba" value="yakuniy">
+          <span><b>Yakuniy savdo</b><em>fayl bo'yicha</em></span></label>
+      </div>
+
+      <p class="note" id="batch-note"></p>
+      <div id="gap-note"></div>
+      <div class="toolbar" style="margin-bottom:12px;box-shadow:none;background:transparent;border:none;padding:0">
+        <div class="fld grow">
+          <label for="f-search">Qidirish</label>
+          <input type="search" id="f-search" placeholder="Sana yoki fayl nomi…" style="width:100%">
+        </div>
+        <button class="danger" id="btn-del-all">Hammasini o'chirish</button>
+      </div>
+      <div class="tbl-wrap" style="max-height:440px;overflow-y:auto"><table class="data" id="t-batches"></table></div>
+    </div>
+
+    <div class="card">
+      <h2>Rejaga kirmagan mahsulotlar</h2>
+      <p class="note">Bular savdo prognozidan chiqarilgan — har biri uchun sabab ko'rsatilgan.</p>
+      <div class="tbl-wrap"><table class="data" id="t-excl"></table></div>
+    </div>
+
+    <div class="card">
+      <h2>Prognoz arxivi</h2>
+      <p class="note">
+        Har bir hisoblash va har bir qo'lda tahrir <b>yangi versiya</b> yaratadi.
+        Eski versiyalar <b>hech qachon o'chirilmaydi</b> — baza triggeri himoya qiladi.
+        <br><b>Qatorni bosing</b> — o'sha rejaning to'liq tarkibi, joriy reja bilan
+        farqi va unga qaytish tugmasi ochiladi.
+      </p>
+      <div class="tbl-wrap"><table class="data" id="t-runs"></table></div>
+    </div>
+  </section>
+
+</div>
+
+<div class="modal" id="modal">
+  <div class="modal-in">
+    <div class="modal-hd">
+      <div>
+        <h2 id="m-name" style="margin:0;font-size:17px"></h2>
+        <div class="sub" id="m-sub"></div>
+      </div>
+      <button class="x" id="m-close">&times;</button>
+    </div>
+    <div id="m-body" class="empty">Yuklanmoqda…</div>
+  </div>
+</div>
+
+<!-- O'chirishni tasdiqlash — nima o'chirilishi aniq ko'rsatiladi -->
+<div class="modal" id="confirm">
+  <div class="modal-in" style="max-width:520px">
+    <div class="modal-hd">
+      <h2 id="cf-title" style="margin:0;font-size:17px"></h2>
+      <button class="x" id="cf-x">&times;</button>
+    </div>
+    <div id="cf-body"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="ghost" id="cf-cancel">Bekor qilish</button>
+      <button class="danger" id="cf-ok">O'chirish</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DOW  = {1:'Du',2:'Se',3:'Ch',4:'Pa',5:'Ju',6:'Sha',7:'Ya'};
+const DOWF = {1:'Dushanba',2:'Seshanba',3:'Chorshanba',4:'Payshanba',5:'Juma',6:'Shanba',7:'Yakshanba'};
+const fmt  = n => n == null ? '—' : Math.round(n).toLocaleString('ru-RU').replace(/ /g,' ');
+const css  = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const $    = s => document.querySelector(s);
+const esc  = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* O'q uchun yumaloq shkala: 100 890 emas, 100 000 kabi o'qiladigan qadamlar */
+function niceScale(max, want = 5) {
+  if (!(max > 0)) return { max: 1, ticks: [0, 1] };
+  const raw = max / want, mag = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / mag;
+  const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * mag;
+  const top = Math.ceil(max / step) * step, ticks = [];
+  for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v);
+  return { max: top, ticks };
+}
+
+let S = {};   // holat
+
+function accLevel(w) {
+  if (w == null) return { c: css('--text-muted'), t: 'noma\'lum', icon: '·' };
+  if (w <= 15)   return { c: css('--good'),       t: 'yuqori',    icon: '●' };
+  if (w <= 25)   return { c: css('--warning'),    t: 'o\'rta',     icon: '◐' };
+  return              { c: css('--critical'),   t: 'past',      icon: '○' };
+}
+
+// ==================== Navigatsiya ====================
+function route() {
+  const h = (location.hash || '#prognoz').slice(1);
+  const page = ['prognoz', 'malumotlar'].includes(h) ? h : 'prognoz';
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('on'));
+  document.querySelectorAll('nav a').forEach(a => a.classList.remove('on'));
+  $('#v-' + page).classList.add('on');
+  $('#nav-' + page).classList.add('on');
+  // grafik yashirin bo'lganda kengligi 0 bo'ladi — ko'rinishga o'tganda qayta chizamiz
+  if (page === 'prognoz') { if (S.pivot) drawPivot(S.pivot); if (S.dow) drawDow(S.dow); }
+  window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', route);
+
+// ==================== Yuklash ====================
+/** Prognoz hali hisoblanmagan bo'lsa (yoki baza bo'sh bo'lsa) 404 keladi —
+ *  bu xato emas, shunchaki holat. null qaytaramiz va sayt buzilmaydi. */
+async function getJSON(url, allow404 = false) {
+  const r = await fetch(url);
+  if (r.status === 404 && allow404) return null;
+  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.json();
+}
+
+async function loadAll() {
+  const t  = $('#f-type').value;
+  const dk = $('#f-dokon').value;
+  const us = $('#f-usul').value;
+  $('#fld-usul').style.display = dk ? '' : 'none';
+  const q  = t ? '?ptype=' + encodeURIComponent(t) : '';
+  const pq = '?round_to=' + $('#f-round').value
+           + (t  ? '&ptype=' + encodeURIComponent(t)  : '')
+           + (dk ? '&dokon=' + encodeURIComponent(dk) + '&usul=' + us : '');
+
+  const [summary, plan, dow, pivot, ov, batches, batchesY, excl, runs, dokon] =
+    await Promise.all([
+      getJSON('/api/summary', true),
+      getJSON('/api/plan' + q, true),
+      getJSON('/api/dow'),
+      getJSON('/api/pivot' + pq, true),
+      getJSON('/api/overview'),
+      getJSON('/api/batches?manba=fakt'),
+      getJSON('/api/batches?manba=yakuniy'),
+      getJSON('/api/excluded'),
+      getJSON('/api/runs'),
+      getJSON('/api/dokon?usul=' + us, true),
+    ]);
+  S = { summary, plan, dow, pivot, ov, batches, batchesY, excl, runs, dokon };
+
+  if (plan) {
+    const sel = $('#f-type');
+    if (sel.options.length === 1) { plan.types.forEach(x => sel.add(new Option(x, x))); sel.value = t; }
+  }
+  if (dokon) {
+    const sel = $('#f-dokon');
+    if (sel.options.length === 1) {
+      dokon.items.forEach(x =>
+        sel.add(new Option(`${x.shop_type} — ${x.ulush}%`, x.shop_type)));
+      sel.value = dk;
+    }
+  }
+  if (summary?.run) {
+    $('#f-hor').value = summary.run.horizon_days;
+    $('#f-adj').value = summary.run.adjust_factor.toFixed(2);
+  }
+
+  render();
+  route();
+}
+
+function renderEmpty() {
+  const hasData = S.ov.sales.rows > 0;
+  $('#topmeta').innerHTML = hasData
+    ? `Ma'lumot: <b>${S.ov.sales.to}</b> gacha · ${fmt(S.ov.sales.days)} kun<br>Prognoz hali hisoblanmagan`
+    : `Bazada ma'lumot yo'q`;
+  $('#plan-sub').textContent = hasData
+    ? 'Ma\'lumot bor, lekin prognoz hali hisoblanmagan.'
+    : 'Bazada savdo ma\'lumoti yo\'q.';
+  $('#t-pivot').innerHTML = '';
+  $('#btn-recalc').disabled = !hasData;
+}
+
+function render() {
+  const { summary: s, plan, dow, pivot, ov, batches, excl, runs } = S;
+
+  // Ma'lumot bo'limi har doim ishlaydi — prognoz bo'lmasa ham
+  drawDbTiles(ov);
+  drawBatches();
+  drawExcluded(excl);
+  drawRuns(runs);
+  drawDow(dow);
+
+  if (!s || !plan || !pivot) { renderEmpty(); return; }
+  $('#btn-recalc').disabled = false;
+
+  const r = s.run, f = s.forecast;
+
+  $('#topmeta').innerHTML =
+    `Ma'lumot: <b>${s.fact.to}</b> gacha · ${fmt(s.fact.days)} kun<br>` +
+    `Hisoblangan: ${new Date(r.created_at).toLocaleString('ru-RU', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
+
+  $('#plan-sub').innerHTML =
+    `Davr: <b>${f.from} → ${f.to}</b> (${f.days} ish kuni) · ` +
+    `Model: ${esc(r.method)} · Ma'lumot: ${s.fact.from} → ${s.fact.to}`;
+
+  drawPivot(pivot);
+}
+
+function drawDbTiles(ov) {
+  const has = ov.sales.rows > 0;
+  const y = ov.yakuniy || {};
+  const hasY = (y.rows || 0) > 0;
+  $('#db-tiles').innerHTML = `
+    <div class="tile">
+      <div class="k">Fakt savdo <span class="up-tag fakt">TALAB</span></div>
+      <div class="v">${fmt(ov.sales.rows)}</div>
+      <div class="d">${has
+        ? `${ov.sales.days} kun · ${ov.sales.files} fayl<br>${ov.sales.from} → ${ov.sales.to}`
+        : 'ma\'lumot yo\'q'}</div>
+    </div>
+    <div class="tile">
+      <div class="k">Yakuniy savdo <span class="up-tag yakuniy">SOTILGAN</span></div>
+      <div class="v">${fmt(y.rows || 0)}</div>
+      <div class="d">${hasY
+        ? `${y.days} kun · ${y.files} fayl<br>${y.from} → ${y.to}`
+        : 'ma\'lumot yo\'q — kesim hisoblanmaydi'}</div>
+    </div>
+    <div class="tile">
+      <div class="k">O'lchovlar</div>
+      <div class="v">${ov.dims.products}<span class="u">mahsulot</span></div>
+      <div class="d">${fmt(ov.dims.shops)} do'kon · ${ov.dims.zones} zona · ${ov.dims.agents} agent</div>
+    </div>
+    <div class="tile">
+      <div class="k">Baza hajmi</div>
+      <div class="v">${ov.db_size}</div>
+      <div class="d">${has ? `${fmt(ov.sales.qty)} dona · ${fmt(ov.sales.orders)} buyurtma` : '—'}</div>
+    </div>`;
+}
+
+// ==================== Svod jadval ====================
+// ==================== Rejani qo'lda tahrirlash ====================
+// Tahrir eski rejani O'ZGARTIRMAYDI — saqlaganda yangi versiya yaratiladi.
+// Modelning asl qiymati saqlanadi, shunda nima o'zgarganini doim ko'rish mumkin.
+let EDITS = new Map();     // "pid|date" -> {pid, date, qty, orig, cell}
+
+function editKey(pid, date) { return pid + '|' + date; }
+
+function bindPivotEdit(t) {
+  t.querySelectorAll('.pv-cell').forEach(td => {
+    td.onfocus = () => { td.dataset.before = td.textContent.trim(); };
+
+    td.onkeydown = e => {
+      if (e.key === 'Enter') { e.preventDefault(); td.blur(); }
+      if (e.key === 'Escape') { td.textContent = td.dataset.before; td.blur(); }
+    };
+
+    td.onblur = () => {
+      const raw = td.textContent.replace(/[^\d]/g, '');
+      const orig = +td.dataset.orig;
+      const key = editKey(td.dataset.pid, td.dataset.date);
+
+      if (raw === '') {                       // bo'sh -> qaytaramiz
+        td.textContent = orig ? fmt(orig) : '—';
+        EDITS.delete(key);
+        td.classList.remove('dirty');
+        return drawEditBar();
+      }
+      const v = Math.max(0, parseInt(raw, 10));
+      td.textContent = v ? fmt(v) : '—';
+
+      if (v === orig) {
+        EDITS.delete(key);
+        td.classList.remove('dirty');
+      } else {
+        EDITS.set(key, { pid: +td.dataset.pid, date: td.dataset.date, qty: v, orig });
+        td.classList.add('dirty');
+      }
+      drawEditBar();
+    };
+  });
+}
+
+function drawEditBar() {
+  const bar = $('#edit-bar');
+  const n = EDITS.size;
+  if (!n) { bar.classList.remove('on'); return; }
+
+  const delta = [...EDITS.values()].reduce((a, e) => a + (e.qty - e.orig), 0);
+  bar.classList.add('on');
+  $('#edit-count').textContent = n;
+  $('#edit-delta').textContent = (delta >= 0 ? '+' : '−') + fmt(Math.abs(delta));
+  $('#edit-delta').style.color = delta >= 0 ? 'var(--prognoz)' : 'var(--critical)';
+}
+
+function resetEdits() {
+  EDITS.clear();
+  document.querySelectorAll('.pv-cell.dirty').forEach(td => {
+    td.textContent = +td.dataset.orig ? fmt(+td.dataset.orig) : '—';
+    td.classList.remove('dirty');
+  });
+  drawEditBar();
+}
+
+async function saveEdits() {
+  if (!EDITS.size) return;
+  const btn = $('#btn-edit-save');
+  const izoh = $('#edit-izoh').value.trim();
+  btn.disabled = true;
+  btn.textContent = 'Saqlanyapti…';
+
+  try {
+    const res = await fetch('/api/plan/edit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        changes: [...EDITS.values()].map(e => ({
+          product_id: e.pid, target_date: e.date, qty: e.qty,
+        })),
+        izoh: izoh || null,
+      }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.detail || 'Xato');
+
+    EDITS.clear();
+    $('#edit-izoh').value = '';
+    await loadAll();
+    $('#edit-msg').innerHTML =
+      `<div class="banner info" style="margin:12px 0 0">
+         <b>Saqlandi.</b> Yangi versiya: <b>run ${j.run_id}</b>
+         (${j.asos_run}-reja asosida). ${j.ozgartirilgan} ta hujayra o'zgartirildi,
+         jami <b>${fmt(Math.round(j.jami_qty))}</b> dona
+         (${j.farq >= 0 ? '+' : '−'}${fmt(Math.abs(Math.round(j.farq)))}).
+         Eski reja arxivda saqlanib qoldi.
+       </div>`;
+    setTimeout(() => { $('#edit-msg').innerHTML = ''; }, 12000);
+  } catch (e) {
+    $('#edit-msg').innerHTML =
+      `<div class="banner" style="margin:12px 0 0;border-color:var(--critical)">
+         <b>Xato:</b> ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Yangi versiya sifatida saqlash';
+  }
+}
+
+function drawPivot(p) {
+  if (!p || !p.columns.length) { $('#t-pivot').innerHTML = ''; return; }
+
+  const dn = $('#dokon-note');
+  if (p.dokon) {
+    const d = S.dokon || {};
+    const cur = (d.usullar || []).find(u => u.kod === p.usul) || {};
+    dn.innerHTML = `<div class="banner" style="margin-bottom:14px">
+      <b>${esc(p.dokon)}</b> — jami rejaning shu do'kon turiga to'g'ri keladigan qismi.
+      Usul: <b>${esc(cur.nomi || p.usul)}</b>. ${esc(cur.izoh || '')}
+      <br><br>
+      <b>Aniqlik ~${cur.wape || '25'}%</b> — mahsulot darajasidagi
+      <b>${d.mahsulot_wape || 13.75}%</b> dan deyarli ikki barobar yomon
+      (54 mahsulot 720 ta katakka bo'linadi, har biri kichik va shovqinli).
+      <b>Ishlab chiqarish qarorini jami hajmga qarab qabul qiling</b> —
+      bu kesim yetkazib berishni rejalashtirish uchun.
+      <br><br>
+      Bu rejimda hujayralar <b>tahrirlanmaydi</b> — ular jami rejaning ulushi.
+      Tahrirlash uchun do'kon turini "Hammasi" ga qaytaring.
+    </div>`;
+  } else {
+    dn.innerHTML = '';
+  }
+
+  // Alifbo tartibi. localeCompare — kirill+lotin aralash, kod bo'yicha saralash noto'g'ri.
+  const rows = [...p.rows].sort((a, b) =>
+    a.name.localeCompare(b.name, ['ru','uz'], { numeric: true, sensitivity: 'base' }));
+
+  const cls   = c => c.dow === 7 ? 'sun' : (c.dow === 1 ? 'mon' : '');
+  const dnum  = c => `${c.dow} - ${DOWF[c.dow].toLowerCase()}`;
+  const ddate = c => c.date.slice(8) + '.' + c.date.slice(5,7) + '.' + c.date.slice(0,4);
+
+  // table-layout:fixed — kengliklar colgroup'da. Jadval kengligini ham aniq beramiz,
+  // aks holda brauzer ortiqcha joyni birinchi ustunga qo'shib yuboradi.
+  const W_NAME = 270, W_DAY = 90, W_SUN = 34, W_TOT = 100;
+  const tblW = W_NAME + W_TOT + p.columns.reduce((a,c) => a + (c.dow === 7 ? W_SUN : W_DAY), 0);
+  const cg = `<colgroup><col style="width:${W_NAME}px">` +
+    p.columns.map(c => `<col style="width:${c.dow === 7 ? W_SUN : W_DAY}px">`).join('') +
+    `<col style="width:${W_TOT}px"></colgroup>`;
+
+  const head = `<thead>
+    <tr><th class="pname" rowspan="2">Mahsulot</th>
+      ${p.columns.map(c => `<th class="${cls(c)}">${c.dow === 7 ? '' : dnum(c)}</th>`).join('')}
+      <th class="tot" rowspan="2">JAMI<br>${p.columns.filter(c => c.is_forecast).length} kun</th></tr>
+    <tr>${p.columns.map(c => `<th class="${cls(c)}">${c.dow === 7 ? '' : ddate(c)}</th>`).join('')}</tr>
+  </thead>`;
+
+  const canEdit = p.tahrirlanadi !== false;
+
+  const cell = (v, c, r, i) => {
+    if (c.dow === 7) return `<td class="sun sun-cell">—</td>`;
+    if (v == null) return `<td class="${cls(c)} zero">—</td>`;
+    if (!canEdit) return `<td class="${cls(c)} ${!v ? 'zero' : ''}">${v ? fmt(v) : '—'}</td>`;
+    const ed = r.edited && r.edited[i];
+    const title = ed ? ` title="Model: ${fmt(r.model[i])} → qo'lda: ${fmt(v)}"` : '';
+    return `<td class="${cls(c)} ${!v ? 'zero' : ''} ${ed ? 'edited' : ''} pv-cell"
+              data-pid="${r.product_id}" data-date="${c.date}" data-orig="${v}"${title}
+              contenteditable="true" inputmode="numeric">${v ? fmt(v) : '—'}</td>`;
+  };
+
+  const body = `<tbody>${rows.map(r => `<tr data-id="${r.product_id}">
+      <td class="pname">${esc(r.name)}<span class="pv-type">${esc(r.type)}</span></td>
+      ${r.values.map((v,i) => cell(v, p.columns[i], r, i)).join('')}
+      <td class="tot">${fmt(r.total)}</td></tr>`).join('')}</tbody>`;
+
+  const foot = `<tfoot><tr>
+      <td class="pname">JAMI — ${rows.length} mahsulot</td>
+      ${p.totals.map((v,i) => p.columns[i].dow === 7
+        ? `<td class="sun sun-cell">—</td>`
+        : `<td class="${cls(p.columns[i])}">${fmt(v)}</td>`).join('')}
+      <td class="tot">${fmt(p.grand_total)}</td></tr></tfoot>`;
+
+  const t = $('#t-pivot');
+  t.style.width = tblW + 'px';
+  t.innerHTML = cg + head + body + foot;
+  // Mahsulot kartasi — faqat nom ustunidan (hujayra tahrirlanadigan bo'lgani uchun)
+  t.querySelectorAll('tbody .pname').forEach(td =>
+    td.onclick = () => openProduct(+td.parentElement.dataset.id));
+
+  bindPivotEdit(t);
+}
+
+// ==================== Hafta kuni grafigi ====================
+function drawDow(rows) {
+  const svg = $('#c-dow'), tip = $('#tip-dow');
+  const W = svg.clientWidth || 900, H = 200;
+  const M = { t: 22, r: 14, b: 30, l: 60 }, iw = W - M.l - M.r, ih = H - M.t - M.b;
+  if (!rows || !rows.length || iw <= 0) return;
+
+  const sc = niceScale(Math.max(...rows.map(r => r.qty)) * 1.06, 4), maxV = sc.max;
+  const bw = Math.min(74, iw / rows.length - 14);
+  const X = i => M.l + (i + .5) * (iw / rows.length) - bw / 2;
+  const Y = v => M.t + ih - (v / maxV) * ih;
+
+  let g = '';
+  for (const v of sc.ticks) {
+    const y = Y(v);
+    g += `<line class="gridline" x1="${M.l}" y1="${y.toFixed(1)}" x2="${W-M.r}" y2="${y.toFixed(1)}"/>
+          <text class="tick" x="${M.l-8}" y="${(y+4).toFixed(1)}" text-anchor="end">${fmt(v)}</text>`;
+  }
+  const bars = rows.map((r,i) => {
+    const y = Y(r.qty), h = M.t + ih - y;
+    return `<rect x="${X(i).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}"
+              height="${Math.max(h,0).toFixed(1)}" rx="4" fill="var(--fakt)" class="bar" data-i="${i}"/>
+            <text class="lbl" x="${(X(i)+bw/2).toFixed(1)}" y="${(y-7).toFixed(1)}" text-anchor="middle">${r.index.toFixed(2)}×</text>
+            <text class="tick" x="${(X(i)+bw/2).toFixed(1)}" y="${H-M.b+18}" text-anchor="middle">${DOW[r.dow]}</text>`;
+  }).join('');
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = g + `<line class="axisline" x1="${M.l}" y1="${M.t+ih}" x2="${W-M.r}" y2="${M.t+ih}"/>` + bars;
+
+  svg.querySelectorAll('.bar').forEach(b => {
+    b.addEventListener('mouseenter', () => {
+      const r = rows[+b.dataset.i];
+      tip.innerHTML = `<div class="t">${DOWF[r.dow]} — ${r.days} kun</div>
+        <div class="r"><span>O'rtacha hajm</span><span>${fmt(r.qty)} dona</span></div>
+        <div class="r"><span>O'rtacha buyurtma</span><span>${fmt(r.orders)}</span></div>
+        <div class="r"><span>Indeks</span><span>${r.index.toFixed(2)}×</span></div>`;
+      const bb = svg.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      tip.style.opacity = 1;
+      tip.style.left = Math.min(Math.max(rb.left - bb.left + rb.width/2 - tip.offsetWidth/2, 0), bb.width - tip.offsetWidth) + 'px';
+      tip.style.top  = (rb.top - bb.top - tip.offsetHeight - 10) + 'px';
+    });
+    b.addEventListener('mouseleave', () => tip.style.opacity = 0);
+  });
+}
+
+// ==================== Ma'lumot bo'limi jadvallari ====================
+/** Ko'rilayotgan manba: 'fakt' | 'yakuniy' */
+function koManba() {
+  return document.querySelector('input[name="ko-manba"]:checked').value;
+}
+
+function drawBatches() {
+  const m = koManba();
+  const b = (m === 'fakt' ? S.batches : S.batchesY) || { batches: [], gaps: [], count: 0 };
+  const term = $('#f-search').value.trim().toLowerCase();
+  const rows = b.batches.filter(x =>
+    !term || x.sale_date.toLowerCase().includes(term)
+          || x.source_file.toLowerCase().includes(term));
+
+  const fakt = m === 'fakt';
+  $('#batch-note').innerHTML = b.count
+    ? (fakt
+        ? `Bazadagi <b>${b.count}</b> ta kun. Har bir kun bitta faylga to'g'ri keladi —
+           bir xil sanani ikki marta yuklab bo'lmaydi.`
+        : `Bazadagi <b>${b.count}</b> ta fayl,
+           <b>${fmt(b.batches.reduce((a, x) => a + x.kunlar, 0))}</b> kun.
+           Har bir fayl bir necha kunni o'z ichiga oladi — o'chirish fayl bo'yicha.`)
+    : `${fakt ? 'Fakt' : 'Yakuniy'} savdo bazada yo'q. Yuqoridan fayl yuklang.`;
+  $('#btn-del-all').disabled = !b.count;
+  $('#btn-del-all').textContent = `Hammasini o'chirish (${fakt ? 'fakt' : 'yakuniy'})`;
+
+  $('#gap-note').innerHTML = (!fakt || !b.count) ? ''
+    : b.gaps.length
+      ? `<div class="banner"><b>Yetishmayotgan ish kunlari: ${b.gaps.length} ta.</b>
+           ${b.gaps.map(g => esc(g)).join(', ')}.
+           Yakshanbalar hisobga olinmaydi (savdo yo'q).</div>`
+      : `<div class="banner info">Ish kunlarida bo'shliq yo'q — barcha kunlar yuklangan.</div>`;
+
+  const head = fakt
+    ? `<th class="l">Sana</th><th class="l">Kun</th><th>Qatorlar</th><th>Dona</th>
+       <th class="l">Fayl</th><th class="l">Yuklangan</th><th></th>`
+    : `<th class="l">Fayl</th><th class="l">Davr</th><th>Kun</th><th>Qatorlar</th>
+       <th>Dona</th><th class="l">Yuklangan</th><th></th>`;
+
+  const body = rows.map(x => {
+    const when = new Date(x.loaded_at).toLocaleString('ru-RU',
+      { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    if (fakt) {
+      const d = new Date(x.sale_date + 'T00:00:00');
+      const dw = ((d.getDay() + 6) % 7) + 1;
+      return `<tr>
+        <td class="l"><b>${x.sale_date}</b></td>
+        <td class="l"><span class="chip">${DOW[dw]}</span></td>
+        <td>${fmt(x.rows)}</td>
+        <td>${fmt(x.qty)}</td>
+        <td class="l" style="color:var(--text-secondary)">${esc(x.source_file)}</td>
+        <td class="l" style="color:var(--text-muted)">${when}</td>
+        <td><button class="del" data-del="${esc(x.key)}">O'chirish</button></td>
+      </tr>`;
+    }
+    return `<tr>
+      <td class="l"><b>${esc(x.source_file)}</b></td>
+      <td class="l" style="color:var(--text-secondary)">${x.dan} → ${x.gacha}</td>
+      <td>${x.kunlar}</td>
+      <td>${fmt(x.rows)}</td>
+      <td>${fmt(x.qty)}</td>
+      <td class="l" style="color:var(--text-muted)">${when}</td>
+      <td><button class="del" data-del="${esc(x.key)}">O'chirish</button></td>
+    </tr>`;
+  }).join('');
+
+  $('#t-batches').innerHTML = `
+    <thead><tr>${head}</tr></thead>
+    <tbody>${rows.length ? body
+      : `<tr><td colspan="7" class="empty">${b.count ? 'Topilmadi' : 'Ma\'lumot yo\'q'}</td></tr>`}
+    </tbody>`;
+
+  $('#t-batches').querySelectorAll('[data-del]').forEach(btn => {
+    btn.onclick = () => {
+      const key = btn.dataset.del;
+      const x = b.batches.find(v => v.key === key);
+      const rowsHtml = fakt
+        ? `<tr><td class="l" style="color:var(--text-muted)">Sana</td><td class="l"><b>${esc(key)}</b></td></tr>
+           <tr><td class="l" style="color:var(--text-muted)">Fayl</td><td class="l">${esc(x.source_file)}</td></tr>`
+        : `<tr><td class="l" style="color:var(--text-muted)">Fayl</td><td class="l"><b>${esc(key)}</b></td></tr>
+           <tr><td class="l" style="color:var(--text-muted)">Davr</td><td class="l">${x.dan} → ${x.gacha} (${x.kunlar} kun)</td></tr>`;
+      confirmDelete({
+        title: fakt ? 'Kunni o\'chirish' : 'Faylni o\'chirish',
+        body: `<p style="margin:0 0 14px">Quyidagi ma'lumot bazadan butunlay o'chiriladi:</p>
+          <div class="tbl-wrap"><table class="data"><tbody>
+            ${rowsHtml}
+            <tr><td class="l" style="color:var(--text-muted)">Qatorlar</td><td class="l">${fmt(x.rows)}</td></tr>
+            <tr><td class="l" style="color:var(--text-muted)">Dona</td><td class="l">${fmt(x.qty)}</td></tr>
+          </tbody></table></div>
+          <div class="banner" style="margin:14px 0 0">
+            Prognoz o'zgarmaydi — u arxivdan o'qiladi. Ma'lumot Excel fayldan qayta yuklanishi mumkin.
+          </div>`,
+        run: async () => {
+          const r = await fetch(`/api/batches/${m}/${encodeURIComponent(key)}`,
+                                { method: 'DELETE' });
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.detail || 'Xato');
+          const d = j.deleted;
+          return `${key} o'chirildi — ${fmt(d.rows)} qator, ${fmt(d.qty)} dona`
+               + (d.kunlar ? `, ${d.kunlar} kun.` : '.');
+        },
+      });
+    };
+  });
+}
+
+// ==================== O'chirishni tasdiqlash ====================
+let cfRun = null;
+
+function confirmDelete({ title, body, run }) {
+  $('#cf-title').textContent = title;
+  $('#cf-body').innerHTML = body;
+  cfRun = run;
+  $('#cf-ok').disabled = false;
+  $('#cf-ok').textContent = "O'chirish";
+  $('#confirm').classList.add('on');
+  // Matn kiritish talab qilinsa (hammasini o'chirish), tugma bloklanadi
+  const inp = $('#cf-body').querySelector('#cf-type');
+  if (inp) {
+    $('#cf-ok').disabled = true;
+    inp.oninput = () => { $('#cf-ok').disabled = inp.value.trim() !== 'HAMMASINI OCHIRISH'; };
+    inp.focus();
+  }
+}
+
+$('#cf-ok').onclick = async () => {
+  const b = $('#cf-ok');
+  b.disabled = true; b.textContent = 'O\'chirilmoqda…';
+  try {
+    const msg = await cfRun();
+    $('#confirm').classList.remove('on');
+    await loadAll();
+    $('#up-result').innerHTML =
+      `<div class="up-row up-ok"><span class="up-badge">O'CHIRILDI</span><span class="f">${esc(msg)}</span></div>` +
+      `<div class="banner" style="margin-top:13px">
+         Ma'lumot o'zgardi — prognoz eskirdi.
+         <a href="#prognoz"><b>Savdo prognozi</b></a> bo'limida
+         <b>"Qayta hisoblash"</b> tugmasini bosing.
+       </div>`;
+    window.scrollTo(0, 0);
+  } catch (e) {
+    $('#cf-body').insertAdjacentHTML('beforeend',
+      `<div class="banner" style="margin-top:12px;background:color-mix(in srgb,var(--critical) 12%,transparent);
+        border-color:var(--critical)">Xato: ${esc(e.message)}</div>`);
+  } finally {
+    b.disabled = false; b.textContent = "O'chirish";
+  }
+};
+
+$('#btn-del-all').onclick = () => {
+  const m = koManba();
+  const fakt = m === 'fakt';
+  const d = fakt ? S.ov.sales : S.ov.yakuniy;
+  const nom = fakt ? 'FAKT SAVDO' : 'YAKUNIY SAVDO';
+
+  confirmDelete({
+    title: `BARCHA ${nom} ma'lumotini o'chirish`,
+    body: `<div class="banner" style="background:color-mix(in srgb,var(--critical) 12%,transparent);
+             border-color:var(--critical);margin:0 0 14px">
+             <b>Diqqat:</b> <b>${nom}</b> jadvalidagi butun tarix o'chiriladi.
+             Bu amalni qaytarib bo'lmaydi.
+             ${fakt
+               ? 'Talab ma\'lumoti yo\'qoladi — prognoz qayta hisoblanmaydi.'
+               : 'Kesim (yo\'qotilgan savdo) hisoblanmay qoladi.'}
+             <br><br>Prognoz <b>arxiviga tegilmaydi</b> — u o'zgarmas.
+           </div>
+           <div class="tbl-wrap"><table class="data"><tbody>
+             <tr><td class="l" style="color:var(--text-muted)">Yozuvlar</td><td class="l"><b>${fmt(d.rows)}</b></td></tr>
+             <tr><td class="l" style="color:var(--text-muted)">Kunlar</td><td class="l">${d.days}</td></tr>
+             <tr><td class="l" style="color:var(--text-muted)">Fayllar</td><td class="l">${d.files}</td></tr>
+             <tr><td class="l" style="color:var(--text-muted)">Davr</td><td class="l">${d.from} → ${d.to}</td></tr>
+           </tbody></table></div>
+           <p style="margin:16px 0 6px;font-size:13px">
+             Tasdiqlash uchun quyidagi matnni aynan yozing:
+             <code style="background:var(--surface-2);padding:2px 6px;border-radius:4px">HAMMASINI OCHIRISH</code>
+           </p>
+           <input type="text" id="cf-type" placeholder="HAMMASINI OCHIRISH" style="width:100%" autocomplete="off">`,
+    run: async () => {
+      const r = await fetch(
+        `/api/batches?manba=${m}&confirm=${encodeURIComponent('HAMMASINI OCHIRISH')}`,
+        { method: 'DELETE' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || 'Xato');
+      return `${nom} o'chirildi — ${fmt(j.deleted.rows)} qator, ${j.deleted.days} kun.`;
+    },
+  });
+};
+
+document.querySelectorAll('input[name="ko-manba"]').forEach(
+  el => el.onchange = () => { $('#f-search').value = ''; drawBatches(); });
+
+$('#cf-x').onclick = $('#cf-cancel').onclick = () => $('#confirm').classList.remove('on');
+$('#confirm').onclick = e => { if (e.target.id === 'confirm') $('#confirm').classList.remove('on'); };
+
+function drawExcluded(rows) {
+  $('#t-excl').innerHTML = `
+    <thead><tr>
+      <th class="l">Mahsulot</th><th class="l">Turi</th><th>Sotilgan kun</th>
+      <th>Yaqinda</th><th>Jami dona</th><th class="l">Sabab</th>
+    </tr></thead>
+    <tbody>${rows.map(x => `<tr>
+      <td class="l">${esc(x.name)}</td>
+      <td class="l"><span class="chip">${esc(x.type)}</span></td>
+      <td>${x.n_days ?? '—'}</td>
+      <td${x.recent_qty > 0 ? ' style="font-weight:620"' : ' style="color:var(--text-muted)"'}>${fmt(x.recent_qty)}</td>
+      <td>${fmt(x.total_qty)}</td>
+      <td class="l" style="color:var(--text-secondary);white-space:normal">${esc(x.reason)}</td>
+    </tr>`).join('')}</tbody>`;
+}
+
+function drawRuns(runs) {
+  const cur = S.summary?.run.run_id;
+  if (!runs.length) {
+    $('#t-runs').innerHTML = `<tbody><tr><td class="empty">Hali prognoz hisoblanmagan</td></tr></tbody>`;
+    return;
+  }
+  $('#t-runs').innerHTML = `
+    <thead><tr>
+      <th class="l">#</th><th class="l">Hisoblangan</th><th>Gorizont</th>
+      <th>Zaxira</th><th>Mahsulot</th><th>Jami reja</th><th>Oldingidan</th>
+      <th class="l">Davr</th><th class="l">Izoh</th><th></th>
+    </tr></thead>
+    <tbody>${runs.map(r => {
+      const f = r.farq;
+      return `<tr data-run="${r.run_id}" style="cursor:pointer${
+        r.run_id === cur ? ';background:color-mix(in srgb, var(--fakt) 8%, transparent)' : ''}">
+      <td class="l"><b>${r.run_id}</b>${r.run_id === cur ? ' <span class="chip">joriy</span>' : ''}${
+        r.qolda ? ` <span class="up-tag yakuniy" title="${r.ozgartirilgan} ta hujayra qo'lda o'zgartirilgan (run ${r.asos_run} asosida)">QO'LDA</span>` : ''}</td>
+      <td class="l">${new Date(r.created_at).toLocaleString('ru-RU',
+        {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+      <td>${r.horizon} kun</td>
+      <td>${r.adjust.toFixed(2)}</td>
+      <td>${r.products}</td>
+      <td style="font-weight:620;color:var(--prognoz)">${fmt(r.total_qty)}</td>
+      <td style="color:${!f ? 'var(--text-muted)' : (f > 0 ? 'var(--prognoz)' : 'var(--critical)')}">
+        ${f == null ? '—' : (f > 0 ? '+' : '−') + fmt(Math.abs(Math.round(f)))}</td>
+      <td class="l" style="color:var(--text-secondary)">${r.from} → ${r.to}</td>
+      <td class="l" style="color:var(--text-muted)">${esc(r.notes || '—')}</td>
+      <td><button class="del" style="background:transparent;color:var(--fakt);
+        border-color:var(--fakt)">Ochish</button></td>
+    </tr>`;}).join('')}</tbody>`;
+
+  $('#t-runs').querySelectorAll('tr[data-run]').forEach(tr => {
+    tr.onclick = () => openRun(+tr.dataset.run);
+  });
+}
+
+// ==================== Fayl yuklash ====================
+async function uploadFiles(fileList) {
+  const files = [...fileList].filter(f => /\.(xlsx|xlsm)$/i.test(f.name));
+  const bad = [...fileList].length - files.length;
+  const box = $('#up-result'), drop = $('#drop');
+
+  if (!files.length) {
+    box.innerHTML = `<div class="up-row up-err"><span class="f">Yaroqli .xlsx fayl topilmadi</span></div>`;
+    return;
+  }
+
+  drop.classList.add('busy');
+  box.innerHTML = `<div class="up-row"><span class="f">${files.length} ta fayl yuklanmoqda…</span></div>`;
+
+  const fd = new FormData();
+  files.forEach(f => fd.append('files', f, f.name));
+
+  const manba = document.querySelector('input[name="manba"]:checked').value;
+
+  let r;
+  try {
+    const res = await fetch(
+      `/api/upload?manba=${manba}&replace=${$('#chk-replace').checked}`,
+      { method: 'POST', body: fd });
+    r = await res.json();
+    if (!res.ok) throw new Error(r.detail || 'Server xatosi');
+  } catch (e) {
+    drop.classList.remove('busy');
+    box.innerHTML = `<div class="up-row up-err"><span class="f">Xato: ${esc(e.message)}</span></div>`;
+    return;
+  }
+
+  const badge = { loaded:'YUKLANDI', replaced:'QAYTA YOZILDI', skipped:'O\'TKAZILDI', error:'XATO' };
+  const klass = { loaded:'up-ok', replaced:'up-ok', skipped:'up-skip', error:'up-err' };
+  const S2 = r.summary;
+
+  const src = [];
+  if (S2.fakt)    src.push(`${S2.fakt} fakt savdo`);
+  if (S2.yakuniy) src.push(`${S2.yakuniy} yakuniy savdo`);
+
+  box.innerHTML =
+    `<div class="up-row" style="padding-left:0">
+       <span class="f"><b>Natija:</b> ${S2.loaded} yuklandi · ${S2.replaced} qayta yozildi ·
+         ${S2.skipped} o'tkazildi · ${S2.errors} xato${bad ? ` · ${bad} fayl .xlsx emas` : ''}
+         ${src.length ? ` <b>(${src.join(', ')})</b>` : ''}</span>
+     </div>` +
+    r.results.map(x => `<div class="up-row ${klass[x.status]}">
+        <span class="up-badge">${badge[x.status]}</span>
+        <span class="f">${esc(x.file)}${x.manba
+          ? `<span class="up-tag ${x.manba}">${x.manba === 'fakt' ? 'FAKT' : 'YAKUNIY'}</span>` : ''}</span>
+        ${x.sale_date ? `<span class="n">${esc(x.sale_date)}${
+          x.kunlar ? ` · ${x.kunlar} kun` : ''}</span>` : ''}
+        ${x.rows ? `<span class="n">${fmt(x.rows)} qator · ${fmt(Math.round(x.qty))} dona</span>` : ''}
+        ${x.message ? `<span class="n" style="color:var(--text-secondary)">${esc(x.message)}</span>` : ''}
+      </div>`).join('');
+
+  drop.classList.remove('busy');
+  $('#file-input').value = '';        // bir xil faylni qayta tanlash mumkin bo'lsin
+
+  if (r.needs_recompute) {
+    box.insertAdjacentHTML('beforeend',
+      `<div class="banner" style="margin-top:13px">
+         Yangi ma'lumot yuklandi (bazada oxirgi kun: <b>${r.db.last_day}</b>).
+         Prognoz hali eski ma'lumotga asoslangan —
+         <a href="#prognoz"><b>Savdo prognozi</b></a> bo'limiga o'tib
+         <b>"Qayta hisoblash"</b> tugmasini bosing.
+       </div>`);
+  }
+  await loadAll();                    // barcha bo'limlarni yangilaymiz
+}
+
+// ==================== Mahsulot tafsiloti ====================
+// ==================== Arxivdagi rejani ochish ====================
+async function openRun(runId) {
+  const cur = S.summary?.run.run_id;
+  $('#modal').classList.add('on');
+  $('#m-name').textContent = `Prognoz — run ${runId}`;
+  $('#m-sub').textContent = 'Yuklanmoqda…';
+  $('#m-body').innerHTML = '<div class="empty">Yuklanmoqda…</div>';
+
+  let d;
+  try {
+    const r = await fetch('/api/runs/' + runId);
+    d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Xato');
+  } catch (e) {
+    $('#m-body').innerHTML = `<div class="empty">Xato: ${esc(e.message)}</div>`;
+    return;
+  }
+
+  const meta = S.runs.find(x => x.run_id === runId) || {};
+  const joriy = runId === cur;
+
+  $('#m-sub').innerHTML =
+    `${new Date(d.run.created_at).toLocaleString('ru-RU')} · ` +
+    `ma'lumot <b>${d.run.data_last_day}</b> gacha · ` +
+    `zaxira ustamasi <b>${(meta.adjust ?? 0).toFixed(2)}</b>` +
+    (meta.qolda ? ` · <span class="up-tag yakuniy">QO'LDA</span> ${meta.ozgartirilgan} hujayra
+       (run ${meta.asos_run} asosida)` : '') +
+    (joriy ? ' · <span class="chip">joriy reja</span>' : '');
+
+  // joriy reja bilan solishtirish
+  const joriyMap = new Map((S.plan?.items || []).map(x => [x.product_id, x.total]));
+  let farqBor = !joriy && joriyMap.size > 0;
+
+  $('#m-body').innerHTML = `
+    <div class="tiles c3" style="margin-bottom:16px">
+      <div class="tile">
+        <div class="k">Jami reja</div>
+        <div class="v">${fmt(Math.round(d.run.total_qty))}<span class="u">dona</span></div>
+        <div class="d">${d.items.length} mahsulot</div>
+      </div>
+      <div class="tile">
+        <div class="k">Davr</div>
+        <div class="v" style="font-size:19px">${meta.from || '—'}</div>
+        <div class="d">→ ${meta.to || '—'} · ${meta.horizon || '—'} ish kuni</div>
+      </div>
+      <div class="tile">
+        <div class="k">Izoh</div>
+        <div class="v" style="font-size:15px;font-weight:500">${esc(meta.notes || '—')}</div>
+        <div class="d">${meta.fakt_kunlar || '—'} kun fakt · ${meta.yak_kunlar || '—'} kun yakuniy</div>
+      </div>
+    </div>
+
+    ${joriy ? '' : `<button id="m-activate" style="margin-bottom:14px">
+        Shu rejaga qaytish (joriy qilish)</button>
+      <span style="margin-left:10px;font-size:12.5px;color:var(--text-muted)">
+        Joriy reja arxivda qoladi — hech narsa o'chmaydi</span>`}
+
+    <div class="tbl-wrap" style="max-height:420px;overflow-y:auto">
+      <table class="data">
+        <thead><tr>
+          <th class="l">Mahsulot</th><th class="l">Turi</th>
+          <th>Jami</th><th>Past</th><th>Yuqori</th>
+          ${farqBor ? '<th>Joriy reja</th><th>Farq</th>' : ''}
+        </tr></thead>
+        <tbody>${d.items.map(x => {
+          const j = joriyMap.get(x.product_id);
+          const f = (farqBor && j != null) ? x.total - j : null;
+          return `<tr>
+            <td class="l">${esc(x.name)}</td>
+            <td class="l"><span class="chip">${esc(x.type)}</span></td>
+            <td style="font-weight:620">${fmt(x.total)}</td>
+            <td style="color:var(--text-muted)">${fmt(x.lo)}</td>
+            <td style="color:var(--text-muted)">${fmt(x.hi)}</td>
+            ${farqBor ? `<td style="color:var(--text-secondary)">${j != null ? fmt(j) : '—'}</td>
+              <td style="color:${!f ? 'var(--text-muted)' : (f > 0 ? 'var(--prognoz)' : 'var(--critical)')};
+                        font-weight:${f ? 620 : 400}">
+                ${f == null ? '—' : (f === 0 ? '—' : (f > 0 ? '+' : '−') + fmt(Math.abs(f)))}</td>` : ''}
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+
+  const act = $('#m-activate');
+  if (act) act.onclick = async () => {
+    act.disabled = true;
+    act.textContent = 'Almashtirilyapti…';
+    const r = await fetch(`/api/runs/${runId}/activate`, { method: 'POST' });
+    const j = await r.json();
+    if (r.ok) {
+      $('#modal').classList.remove('on');
+      await loadAll();
+    } else {
+      act.disabled = false;
+      act.textContent = 'Xato: ' + (j.detail || '');
+    }
+  };
+}
+
+async function openProduct(pid) {
+  $('#modal').classList.add('on');
+  $('#m-body').innerHTML = '<div class="empty">Yuklanmoqda…</div>';
+  const d = await fetch('/api/product/' + pid).then(r => r.json());
+  const a = d.accuracy || {}, lv = accLevel(a.wape_14d);
+
+  $('#m-name').textContent = d.product.name;
+  $('#m-sub').innerHTML = `<span class="chip">${esc(d.product.product_type)}</span> · ` +
+    `${a.n_days || 0} kun tarix · aniqlik: <b style="color:${lv.c}">` +
+    `${a.wape_14d != null ? a.wape_14d.toFixed(1) + '%' : '—'}</b> (${lv.t})`;
+
+  const tot = d.forecast.reduce((s,x) => s + x.qty, 0);
+  const lo  = d.forecast.reduce((s,x) => s + x.lo, 0);
+  const hi  = d.forecast.reduce((s,x) => s + x.hi, 0);
+  const warn = a.wape_14d != null && a.wape_14d > 25
+    ? `<div class="banner">⚠ Bu mahsulotning prognoz xatosi yuqori (${a.wape_14d.toFixed(0)}%).
+         Rejani qo'lda ko'rib chiqish tavsiya etiladi.</div>` : '';
+  const half = Math.floor(d.forecast.length / 2);
+
+  $('#m-body').innerHTML = `
+    ${warn}
+    <div class="tiles c3">
+      <div class="tile hero"><div class="k">Reja (${d.forecast.length} kun)</div>
+        <div class="v">${fmt(tot)}<span class="u">dona</span></div>
+        <div class="d">oraliq: ${fmt(lo)} – ${fmt(hi)}</div></div>
+      <div class="tile"><div class="k">1-hafta</div>
+        <div class="v">${fmt(d.forecast.slice(0, half).reduce((s,x)=>s+x.qty,0))}</div></div>
+      <div class="tile"><div class="k">2-hafta</div>
+        <div class="v">${fmt(d.forecast.slice(half).reduce((s,x)=>s+x.qty,0))}</div></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--fakt)"></i>Fakt</span>
+      <span><i style="background:var(--prognoz)"></i>Prognoz</span>
+      <span><i style="background:var(--band);border:1px solid var(--prognoz)"></i>Ishonch oralig'i</span>
+    </div>
+    <div class="chart-box"><svg id="c-prod" height="260"></svg><div class="tip" id="tip-prod"></div></div>
+    <h2 style="font-size:14px;margin:24px 0 2px">Hafta kuni profili</h2>
+    <p class="note" style="color:var(--text-muted);font-size:12.5px;margin:0 0 10px">
+      Oxirgi 8 hafta o'rtachasi — model aynan shu profildan foydalanadi.</p>
+    <div class="chart-box"><svg id="c-pdow" height="150"></svg><div class="tip" id="tip-pdow"></div></div>
+    <h2 style="font-size:14px;margin:24px 0 10px">Kunlik reja</h2>
+    <div class="tbl-wrap"><table class="data"><thead><tr>
+        <th class="l">Sana</th><th class="l">Kun</th><th>Reja (dona)</th><th>Oraliq</th>
+      </tr></thead><tbody>${d.forecast.map(x => `<tr>
+        <td class="l">${x.date}</td><td class="l"><span class="chip">${DOW[x.dow]}</span></td>
+        <td style="font-weight:620;color:var(--prognoz)">${fmt(x.qty)}</td>
+        <td style="color:var(--text-muted)">${fmt(x.lo)} – ${fmt(x.hi)}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+
+  drawProdChart(d);
+  drawProdDow(d.dow_profile);
+}
+
+function drawProdChart(d) {
+  const svg = $('#c-prod'), tip = $('#tip-prod');
+  const W = svg.clientWidth || 880, H = 260;
+  const M = { t: 14, r: 14, b: 32, l: 58 }, iw = W - M.l - M.r, ih = H - M.t - M.b;
+  const hist = d.history.slice(-42), fc = d.forecast;
+  const pts = [...hist.map(x => ({...x, kind:'h'})), ...fc.map(x => ({...x, kind:'f'}))];
+  if (!pts.length || iw <= 0) return;
+
+  const sc = niceScale(Math.max(...hist.map(x=>x.qty), ...fc.map(x=>x.hi), 1), 4), maxV = sc.max;
+  const X = i => M.l + i * iw / (pts.length - 1);
+  const Y = v => M.t + ih - (v / maxV) * ih;
+  const hN = hist.length;
+
+  let g = '';
+  for (const v of sc.ticks) {
+    const y = Y(v);
+    g += `<line class="gridline" x1="${M.l}" y1="${y.toFixed(1)}" x2="${W-M.r}" y2="${y.toFixed(1)}"/>
+          <text class="tick" x="${M.l-8}" y="${(y+4).toFixed(1)}" text-anchor="end">${fmt(v)}</text>`;
+  }
+  const bt = fc.map((p,i) => `${X(hN+i).toFixed(1)},${Y(p.hi).toFixed(1)}`);
+  const bb = fc.map((p,i) => `${X(hN+i).toFixed(1)},${Y(p.lo).toFixed(1)}`).reverse();
+  const band = `<polygon points="${bt.concat(bb).join(' ')}" fill="var(--band)"/>`;
+  const hPath = hist.map((p,i) => (i?'L':'M') + X(i).toFixed(1) + ',' + Y(p.qty).toFixed(1)).join(' ');
+  const fSeq = [{x:X(hN-1), y:Y(hist[hN-1].qty)}, ...fc.map((p,i) => ({x:X(hN+i), y:Y(p.qty)}))];
+  const fPath = fSeq.map((p,i) => (i?'L':'M') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+  const bx = X(hN - 0.5);
+  let xt = '';
+  pts.forEach((p,i) => { if (i % 7 === 0 || i === pts.length-1)
+    xt += `<text class="tick" x="${X(i).toFixed(1)}" y="${H-M.b+17}" text-anchor="middle">${p.date.slice(5).replace('-','.')}</text>`; });
+  const dots = fc.map((p,i) =>
+    `<circle cx="${X(hN+i).toFixed(1)}" cy="${Y(p.qty).toFixed(1)}" r="3.5"
+       fill="var(--prognoz)" stroke="var(--surface-1)" stroke-width="2"/>`).join('');
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = `${g}
+    <line class="axisline" x1="${M.l}" y1="${M.t+ih}" x2="${W-M.r}" y2="${M.t+ih}"/>
+    ${band}
+    <line class="axisline" x1="${bx.toFixed(1)}" y1="${M.t}" x2="${bx.toFixed(1)}" y2="${M.t+ih}"/>
+    <path d="${hPath}" fill="none" stroke="var(--fakt)" stroke-width="2" stroke-linejoin="round"/>
+    <path d="${fPath}" fill="none" stroke="var(--prognoz)" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round"/>
+    ${dots}${xt}<g id="hp"></g>
+    <rect x="${M.l}" y="${M.t}" width="${iw}" height="${ih}" fill="transparent" id="hitp"/>`;
+
+  const hov = svg.querySelector('#hp');
+  svg.querySelector('#hitp').addEventListener('mousemove', e => {
+    const r = svg.getBoundingClientRect();
+    const px = (e.clientX - r.left) * (W / r.width);
+    let i = Math.round((px - M.l) / (iw / (pts.length - 1)));
+    i = Math.max(0, Math.min(pts.length - 1, i));
+    const p = pts[i], x = X(i), y = Y(p.qty), isF = p.kind === 'f';
+    hov.innerHTML = `<line class="axisline" x1="${x.toFixed(1)}" y1="${M.t}" x2="${x.toFixed(1)}" y2="${M.t+ih}"/>
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"
+        fill="${isF?'var(--prognoz)':'var(--fakt)'}" stroke="var(--surface-1)" stroke-width="2"/>`;
+    tip.innerHTML = `<div class="t">${p.date} · ${DOW[p.dow]}</div>
+      <div class="r"><span>${isF?'Prognoz':'Fakt'}</span><span>${fmt(p.qty)} dona</span></div>
+      ${isF ? `<div class="r"><span>Oraliq</span><span>${fmt(p.lo)} – ${fmt(p.hi)}</span></div>` : ''}`;
+    tip.style.opacity = 1;
+    const lx = (x / W) * r.width;
+    tip.style.left = Math.min(Math.max(lx - tip.offsetWidth/2, 0), r.width - tip.offsetWidth) + 'px';
+    tip.style.top  = ((y / H) * r.height - tip.offsetHeight - 12) + 'px';
+  });
+  svg.querySelector('#hitp').addEventListener('mouseleave', () => { tip.style.opacity = 0; hov.innerHTML = ''; });
+}
+
+function drawProdDow(rows) {
+  const svg = $('#c-pdow'), tip = $('#tip-pdow');
+  const W = svg.clientWidth || 880, H = 150;
+  const M = { t: 18, r: 14, b: 26, l: 58 }, iw = W - M.l - M.r, ih = H - M.t - M.b;
+  if (!rows.length || iw <= 0) return;
+
+  const sc = niceScale(Math.max(...rows.map(r => r.qty)) * 1.08, 3), maxV = sc.max;
+  const bw = Math.min(66, iw / rows.length - 14);
+  const X = i => M.l + (i + .5) * (iw / rows.length) - bw / 2;
+  const Y = v => M.t + ih - (v / maxV) * ih;
+
+  let g = '';
+  for (const v of sc.ticks) {
+    const y = Y(v);
+    g += `<line class="gridline" x1="${M.l}" y1="${y.toFixed(1)}" x2="${W-M.r}" y2="${y.toFixed(1)}"/>
+          <text class="tick" x="${M.l-8}" y="${(y+4).toFixed(1)}" text-anchor="end">${fmt(v)}</text>`;
+  }
+  const bars = rows.map((r,i) => {
+    const y = Y(r.qty), h = M.t + ih - y;
+    return `<rect x="${X(i).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}"
+              height="${Math.max(h,0).toFixed(1)}" rx="4" fill="var(--fakt)" class="pbar" data-i="${i}"/>
+            <text class="lbl" x="${(X(i)+bw/2).toFixed(1)}" y="${(y-6).toFixed(1)}" text-anchor="middle">${fmt(r.qty)}</text>
+            <text class="tick" x="${(X(i)+bw/2).toFixed(1)}" y="${H-M.b+16}" text-anchor="middle">${DOW[r.dow]}</text>`;
+  }).join('');
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = g + `<line class="axisline" x1="${M.l}" y1="${M.t+ih}" x2="${W-M.r}" y2="${M.t+ih}"/>` + bars;
+
+  svg.querySelectorAll('.pbar').forEach(b => {
+    b.addEventListener('mouseenter', () => {
+      const r = rows[+b.dataset.i];
+      tip.innerHTML = `<div class="t">${DOWF[r.dow]}</div>
+        <div class="r"><span>O'rtacha</span><span>${fmt(r.qty)} dona</span></div>`;
+      const bb = svg.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      tip.style.opacity = 1;
+      tip.style.left = Math.min(Math.max(rb.left - bb.left + rb.width/2 - tip.offsetWidth/2, 0), bb.width - tip.offsetWidth) + 'px';
+      tip.style.top  = (rb.top - bb.top - tip.offsetHeight - 10) + 'px';
+    });
+    b.addEventListener('mouseleave', () => tip.style.opacity = 0);
+  });
+}
+
+// ==================== Hodisalar ====================
+$('#f-type').onchange  = loadAll;
+$('#f-round').onchange = loadAll;
+$('#f-dokon').onchange = loadAll;
+$('#f-usul').onchange  = loadAll;
+$('#f-search').oninput = drawBatches;
+$('#btn-edit-save').onclick  = saveEdits;
+$('#btn-edit-reset').onclick = resetEdits;
+$('#m-close').onclick  = () => $('#modal').classList.remove('on');
+$('#modal').onclick    = e => { if (e.target.id === 'modal') $('#modal').classList.remove('on'); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#modal').classList.remove('on'); });
+
+$('#btn-recalc').onclick = async () => {
+  const b = $('#btn-recalc');
+  b.disabled = true; b.textContent = 'Hisoblanmoqda…';
+  document.querySelectorAll('#v-prognoz .card').forEach(x => x.classList.add('fade'));
+  try {
+    const res = await fetch(`/api/recompute?horizon=${$('#f-hor').value}&adjust=${$('#f-adj').value}`,
+                            { method: 'POST' });
+    if (!res.ok) throw new Error((await res.json()).detail);
+    await loadAll();
+  } catch (e) {
+    alert('Xato: ' + e.message);
+  } finally {
+    b.disabled = false; b.textContent = 'Qayta hisoblash';
+    document.querySelectorAll('#v-prognoz .card').forEach(x => x.classList.remove('fade'));
+  }
+};
+
+(function initUpload() {
+  const drop = $('#drop'), inp = $('#file-input');
+  drop.onclick = e => { if (e.target.tagName !== 'BUTTON') inp.click(); };
+  $('#btn-pick').onclick = e => { e.stopPropagation(); inp.click(); };
+  inp.onchange = () => inp.files.length && uploadFiles(inp.files);
+  ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.add('over');
+  }));
+  ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.remove('over');
+  }));
+  drop.addEventListener('drop', e => { if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); });
+})();
+
+let rt;
+window.addEventListener('resize', () => {
+  clearTimeout(rt);
+  rt = setTimeout(() => { if (S.pivot) { drawPivot(S.pivot); drawDow(S.dow); } }, 180);
+});
+
+loadAll();
+</script>
+</body>
+</html>

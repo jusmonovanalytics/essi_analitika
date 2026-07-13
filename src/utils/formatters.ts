@@ -53,3 +53,9 @@ export function agentInitials(name: string): string {
 export function agentShortName(firstName: string, lastName: string): string {
   return `${firstName} ${lastName.charAt(0)}.`
 }
+
+/** Son — bo'sh joy bilan ajratilgan (12 345). Prognoz bo'limida ishlatiladi. */
+export function fmt(value: number | string | null | undefined): string {
+  if (value == null) return '—'
+  return new Intl.NumberFormat('ru-RU').format(Math.round(Number(value)))
+}

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Start-Process cmd -ArgumentList '/k cd /d \"D:\\\\ESSI\\\\server\" && python run.py' -WindowStyle Normal)",
+      "Bash(git add *)"
+    ]
+  }
+}

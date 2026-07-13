@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns'
 
-const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8001'
+const BASE = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
 
 async function apiGet(path: string) {
   const r = await fetch(`${BASE}${path}`)
