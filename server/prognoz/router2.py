@@ -190,8 +190,17 @@ async def hisobla(
     Eski reja arxivda qoladi, yangisi uning yoniga qo'shiladi.
     """
     eski = await db.joriy_run()
-    run_id = await db.x("SELECT fn_reja_saqla(%s, %s, %s, %s)",
-                        (gorizont, ustama, zaxira, izoh))
+    try:
+        # Tiplarni ANIQ belgilaymiz. psycopg Python float ni `double precision`
+        # qilib yuboradi, PostgreSQL esa uni `numeric` ga o'zi o'girmaydi —
+        # castsiz fn_reja_saqla(smallint, boolean, double precision, unknown)
+        # topilmay, so'rov 500 bilan yiqiladi.
+        run_id = await db.x(
+            "SELECT fn_reja_saqla(%s::int, %s::boolean, %s::numeric, %s::text)",
+            (gorizont, ustama, zaxira, izoh))
+    except Exception as e:                                       # noqa: BLE001
+        raise HTTPException(500, str(e).split("CONTEXT")[0].strip())
+
     yangi = await db.q("SELECT * FROM reja_runs WHERE run_id = %s", (run_id,), one=True)
     return {
         "ok": True, "run_id": run_id,
