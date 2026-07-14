@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import {
   RefreshCw, Activity, Wifi, WifiOff, AlertTriangle, X,
-  ShoppingCart, DollarSign, TrendingUp, Users, Truck, CheckCircle2, Clock, Database,
+  ShoppingCart, DollarSign, TrendingUp, Database,
   SlidersHorizontal, CalendarDays,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -330,14 +330,9 @@ function KpiRow({ d }: { d: KPIData }) {
   const trO = pO > 0 ? ((d.total_orders - pO) / pO) * 100 : undefined
   return (
     <div className="flex gap-1.5 px-2 py-1.5 flex-shrink-0" style={{ borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
-      <KpiCard label={t('kpi.orders')}            value={d.total_orders.toLocaleString()}       trend={trO} sub={pO>0?`kecha: ${pO}`:''} icon={ShoppingCart}  accent="#3B82F6" />
-      <KpiCard label={t('kpi.revenue')}           value={fmtSum(d.total_sum,true)+' so\'m'}                                               icon={DollarSign}    accent="#10B981" />
-      <KpiCard label={t('kpi.avg_check')}         value={fmtSum(d.avg_check,true)+' so\'m'}                                               icon={TrendingUp}    accent="#8B5CF6" />
-      <KpiCard label={t('kpi.active_agents')}     value={String(d.active_agents)}                                                         icon={Users}         accent="#F59E0B" />
-      <KpiCard label={t('kpi.active_deliveries')} value={String(d.active_deliveries)}                                                     icon={Truck}         accent="#06B6D4" />
-      <KpiCard label={t('kpi.delivered')}         value={String(d.delivered_orders)}                                                      icon={CheckCircle2}  accent="#34D399" />
-      <KpiCard label={t('kpi.pending')}           value={String(d.pending_orders)}                                                        icon={Clock}         accent="#FBBF24" />
-      <KpiCard label={t('kpi.delivery_rate')}     value={d.delivery_rate.toFixed(1)+'%'}                                                  icon={TrendingUp}    accent="#EC4899" />
+      <KpiCard label={t('kpi.orders')}    value={d.total_orders.toLocaleString()} trend={trO} sub={pO>0?`kecha: ${pO}`:''} icon={ShoppingCart} accent="#3B82F6" />
+      <KpiCard label={t('kpi.revenue')}   value={fmtSum(d.total_sum,true)+' so\'m'}                                       icon={DollarSign}   accent="#10B981" />
+      <KpiCard label={t('kpi.avg_check')} value={fmtSum(d.avg_check,true)+' so\'m'}                                       icon={TrendingUp}   accent="#8B5CF6" />
     </div>
   )
 }
