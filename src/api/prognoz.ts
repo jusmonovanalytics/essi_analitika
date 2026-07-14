@@ -166,10 +166,18 @@ export const fetchFayllar = (manba: 'fakt' | 'yakuniy') => get<Fayllar>('/faylla
 export const fetchChiqarilgan = () => get<Chiqarilgan[]>('/chiqarilgan')
 export const fetchMahsulot = (pid: number) => get<Mahsulot>(`/product/${pid}`)
 
-/** QAYTA HISOBLASH — yagona nuqta. Eski reja arxivda qoladi. */
-export const hisobla = (p: { gorizont: number; ustama: boolean; zaxira: number; izoh?: string }) =>
-  send<{ run_id: number; jami: number; mahsulot: number; farq: number | null }>(
-    '/hisobla', 'POST', undefined, p)
+/** QAYTA HISOBLASH — yagona nuqta. Eski reja arxivda qoladi.
+ *
+ *  `boshlanish` — reja qaysi kundan boshlanadi (YYYY-MM-DD).
+ *  Bo'sh qoldirilsa, ma'lumotdan keyingi ish kunidan boshlanadi. */
+export const hisobla = (p: {
+  gorizont: number; ustama: boolean; zaxira: number
+  izoh?: string; boshlanish?: string
+}) =>
+  send<{
+    run_id: number; jami: number; mahsulot: number
+    dan: string; gacha: string; farq: number | null
+  }>('/hisobla', 'POST', undefined, p)
 
 /** QO'LDA TAHRIR — eski rejani o'zgartirmaydi, yangi versiya yaratadi. */
 export const tahrirla = (changes: Tahrir[], izoh?: string) =>

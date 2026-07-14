@@ -27,6 +27,28 @@ const DOW = ['', 'dushanba', 'seshanba', 'chorshanba', 'payshanba', 'juma', 'sha
 type Dirty = Map<string, { pid: number; date: string; qty: number; orig: number }>
 const key = (pid: number, date: string) => `${pid}|${date}`
 
+/** Sanani YYYY-MM-DD ga o'giradi — mahalliy vaqt bo'yicha.
+ *  toISOString() ni ishlatib bo'lmaydi: u UTC ga o'tkazadi va Toshkent
+ *  vaqtida sana bir kun orqaga surilib ketadi. */
+const iso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/** n hafta keyingi dushanba (n=0 — shu haftaning dushanbasi). */
+function dushanba(n: number): string {
+  const d = new Date()
+  const kun = (d.getDay() + 6) % 7        // 0 = dushanba … 6 = yakshanba
+  d.setDate(d.getDate() - kun + n * 7)
+  return iso(d)
+}
+
+/** «Davr» ro'yxati. Qiymat — boshlanish sanasi; '' = ma'lumotdan keyin. */
+const DAVRLAR: [string, string][] = [
+  ['', 'Ma’lumotdan keyin'],
+  [dushanba(0), 'Bu hafta'],
+  [dushanba(1), 'Keyingi hafta'],
+  [dushanba(2), 'Undan keyingi hafta'],
+]
+
 export default function Prognoz() {
   const qc = useQueryClient()
 
@@ -40,6 +62,8 @@ export default function Prognoz() {
   const [gorizont, setGorizont] = useState(12)
   const [zaxira, setZaxira] = useState(1.03)
   const [ustama, setUstama] = useState(true)
+  // '' = ma'lumotdan keyingi ish kunidan boshlanadi (sukut)
+  const [boshlanish, setBoshlanish] = useState('')
 
   // ── qo'lda tahrir
   const [dirty, setDirty] = useState<Dirty>(new Map())
@@ -71,10 +95,15 @@ export default function Prognoz() {
   const reset = () => { setDirty(new Map()); setIzoh('') }
 
   const mHisobla = useMutation({
-    mutationFn: () => hisobla({ gorizont, ustama, zaxira, izoh: izoh || undefined }),
+    mutationFn: () => hisobla({
+      gorizont, ustama, zaxira,
+      izoh: izoh || undefined,
+      boshlanish: boshlanish || undefined,
+    }),
     onSuccess: (r) => {
       reset()
-      setXabar(`Hisoblandi — run ${r.run_id}: ${fmt(Math.round(r.jami))} dona` +
+      setXabar(`Hisoblandi — run ${r.run_id}: ${r.dan} → ${r.gacha}, ` +
+               `${fmt(Math.round(r.jami))} dona` +
                (r.farq != null ? ` (${r.farq >= 0 ? '+' : '−'}${fmt(Math.abs(Math.round(r.farq)))})` : ''))
       qc.invalidateQueries({ queryKey: ['pr-summary'] })
       qc.invalidateQueries({ queryKey: ['pr-plan'] })
@@ -103,6 +132,15 @@ export default function Prognoz() {
     [dirty])
 
   const canEdit = p?.tahrirlanadi !== false
+
+  // Reja ma'lumot oxiridan KEYIN boshlanishi shart — o'tgan kunga reja tuzilmaydi.
+  // Backend ham shuni tekshiradi; bu faqat sana maydonini cheklaydi.
+  const eng_erta = useMemo(() => {
+    if (!s?.fakt.gacha) return undefined
+    const d = new Date(`${s.fakt.gacha}T00:00:00`)
+    d.setDate(d.getDate() + 1)
+    return iso(d)
+  }, [s?.fakt.gacha])
 
   // ── hujayra tahriri
   function onCell(e: React.FocusEvent<HTMLTableCellElement>, pid: number, date: string, orig: number) {
@@ -175,6 +213,25 @@ export default function Prognoz() {
           options={[['1', 'Aniq'], ['10', '10 ga'], ['50', '50 ga'], ['100', '100 ga']]} />
 
         <div className="flex-1" />
+
+        {/* Reja qaysi kundan boshlanadi. Ro'yxat sanani to'ldiradi, sanani
+            qo'lda ham o'zgartirish mumkin — u holda ro'yxat «Boshqa sana» ga o'tadi. */}
+        <Sel label="Davr" value={DAVRLAR.some(([v]) => v === boshlanish) ? boshlanish : '?'}
+          onChange={v => setBoshlanish(v === '?' ? '' : v)}
+          options={DAVRLAR.some(([v]) => v === boshlanish)
+            ? DAVRLAR
+            : [...DAVRLAR, ['?', 'Boshqa sana'] as [string, string]]} />
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] uppercase tracking-wide text-slate-500">Boshlanish</label>
+          <input type="date" value={boshlanish} min={eng_erta}
+            onChange={e => setBoshlanish(e.target.value)}
+            title={boshlanish
+              ? `Reja ${boshlanish} dan boshlanadi`
+              : `Bo'sh — ma'lumotdan keyingi ish kunidan (${s?.fakt.gacha ?? '…'} dan keyin)`}
+            className="px-2 py-1.5 rounded-lg text-xs font-mono outline-none"
+            style={{ background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.18)', color: '#93c5fd', colorScheme: 'dark' }} />
+        </div>
 
         <Sel label="Gorizont" value={String(gorizont)} onChange={v => setGorizont(+v)}
           options={[['6', '6 kun (1 hafta)'], ['12', '12 kun (2 hafta)'], ['18', '18 kun (3 hafta)']]} />

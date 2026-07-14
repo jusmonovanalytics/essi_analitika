@@ -6,7 +6,7 @@ import asyncio
 import io
 import json
 import os
-from datetime import timedelta
+from datetime import date, timedelta
 
 from fastapi import Body, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -184,6 +184,8 @@ async def hisobla(
     ustama: bool = Query(True),
     zaxira: float = Query(1.03, ge=0.5, le=1.5),
     izoh: str = Query(None),
+    boshlanish: date = Query(None, description="Reja qaysi kundan boshlanadi. "
+                                               "Bo'sh = ma'lumotdan keyingi ish kuni."),
 ):
     """QAYTA HISOBLASH — yagona nuqta. Avtomatik chaqirilmaydi.
 
@@ -196,8 +198,8 @@ async def hisobla(
         # castsiz fn_reja_saqla(smallint, boolean, double precision, unknown)
         # topilmay, so'rov 500 bilan yiqiladi.
         run_id = await db.x(
-            "SELECT fn_reja_saqla(%s::int, %s::boolean, %s::numeric, %s::text)",
-            (gorizont, ustama, zaxira, izoh))
+            "SELECT fn_reja_saqla(%s::int, %s::boolean, %s::numeric, %s::text, %s::date)",
+            (gorizont, ustama, zaxira, izoh, boshlanish))
     except Exception as e:                                       # noqa: BLE001
         raise HTTPException(500, str(e).split("CONTEXT")[0].strip())
 

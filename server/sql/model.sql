@@ -251,11 +251,14 @@ FROM r GROUP BY 1;
 -- 4) PROGNOZ
 -- ===========================================================================
 DROP FUNCTION IF EXISTS fn_prognoz(date, int, boolean, numeric);
+DROP FUNCTION IF EXISTS fn_prognoz(date, int, boolean, numeric, date);
 CREATE FUNCTION fn_prognoz(
     p_origin    date    DEFAULT NULL,   -- oxirgi ma'lum kun (NULL = eng so'nggi)
     p_gorizont  int     DEFAULT 12,     -- ish kuni (12 = 2 hafta)
     p_ustama    boolean DEFAULT TRUE,
-    p_kalibr    numeric DEFAULT 1.03    -- trim ning -2.8% qiyshiqligini qoplaydi
+    p_kalibr    numeric DEFAULT 1.03,   -- trim ning -2.8% qiyshiqligini qoplaydi
+    p_boshlanish date   DEFAULT NULL    -- reja qaysi kundan boshlanadi
+                                        -- (NULL = ma'lumotdan keyingi ish kuni)
 )
 RETURNS TABLE (
     product      text,
@@ -328,11 +331,17 @@ dow_ix AS (
            avg(r.q) / NULLIF(avg(avg(r.q)) OVER (PARTITION BY r.product), 0) AS ix
     FROM raqam r WHERE r.rn <= 48 GROUP BY 1, 2
 ),
+-- Reja qaysi kundan boshlanadi. Sukut bo'yicha — ma'lumotdan keyingi kun.
+-- Boshqa sana berilsa (masalan keyingi dushanba), tarix baribir origin gacha
+-- o'qiladi, faqat nishon kunlar suriladi: modelda trend yo'q, koeffitsientlar
+-- nishon sanaga bog'lanadi.
 kelajak AS (
     SELECT g::date AS target_date,
            EXTRACT(ISODOW FROM g)::int AS dow,
            ROW_NUMBER() OVER (ORDER BY g) AS step
-    FROM o, generate_series(o.d + 1, o.d + 40, INTERVAL '1 day') g
+    FROM o, generate_series(COALESCE(p_boshlanish, o.d + 1),
+                            COALESCE(p_boshlanish, o.d + 1) + 45,
+                            INTERVAL '1 day') g
     WHERE EXTRACT(ISODOW FROM g) <> 7
       AND g::date NOT IN (SELECT kun FROM kalendar WHERE turi = 'yopiq')
     LIMIT p_gorizont
@@ -359,18 +368,21 @@ $$ LANGUAGE sql STABLE;
 
 -- Reja: mahsulot kesimida, hafta bo'yicha, ishonch oralig'i bilan
 DROP FUNCTION IF EXISTS fn_reja(date, int, boolean, numeric);
+DROP FUNCTION IF EXISTS fn_reja(date, int, boolean, numeric, date);
 CREATE FUNCTION fn_reja(
     p_origin   date    DEFAULT NULL,
     p_gorizont int     DEFAULT 12,
     p_ustama   boolean DEFAULT TRUE,
-    p_kalibr   numeric DEFAULT 1.03
+    p_kalibr   numeric DEFAULT 1.03,
+    p_boshlanish date  DEFAULT NULL
 )
 RETURNS TABLE (
     product text, product_type text, jami numeric,
     hafta_1 numeric, hafta_2 numeric, past numeric, yuqori numeric,
     ustama numeric, kesim_pct numeric, mavsumiy boolean
 ) AS $$
-WITH f AS (SELECT * FROM fn_prognoz(p_origin, p_gorizont, p_ustama, p_kalibr))
+WITH f AS (SELECT * FROM fn_prognoz(p_origin, p_gorizont, p_ustama, p_kalibr,
+                                    p_boshlanish))
 SELECT f.product, f.product_type,
        ROUND(sum(f.qty)),
        ROUND(sum(f.qty) FILTER (WHERE f.step <= p_gorizont / 2)),
@@ -390,11 +402,14 @@ $$ LANGUAGE sql STABLE;
 -- ===========================================================================
 -- 5) ARXIV — QO'LDA hisoblash
 -- ===========================================================================
-CREATE OR REPLACE FUNCTION fn_reja_saqla(
+DROP FUNCTION IF EXISTS fn_reja_saqla(int, boolean, numeric, text);
+DROP FUNCTION IF EXISTS fn_reja_saqla(int, boolean, numeric, text, date);
+CREATE FUNCTION fn_reja_saqla(
     p_gorizont int     DEFAULT 12,
     p_ustama   boolean DEFAULT TRUE,
     p_kalibr   numeric DEFAULT 1.03,
-    p_izoh     text    DEFAULT NULL
+    p_izoh     text    DEFAULT NULL,
+    p_boshlanish date  DEFAULT NULL    -- NULL = ma'lumotdan keyingi ish kuni
 ) RETURNS integer AS $$
 DECLARE
     v_run integer; v_last date;
@@ -404,6 +419,10 @@ BEGIN
     SELECT max(sale_date) INTO v_last FROM mv_talab;
     IF v_last IS NULL THEN
         RAISE EXCEPTION 'mv_talab bo''sh — avval fakt savdo yuklang.';
+    END IF;
+    IF p_boshlanish IS NOT NULL AND p_boshlanish <= v_last THEN
+        RAISE EXCEPTION 'Boshlanish sanasi (%) ma''lumot oxiridan (%) keyin bo''lishi kerak — o''tgan kunga reja tuzilmaydi.',
+                        p_boshlanish, v_last;
     END IF;
     SELECT count(*), count(DISTINCT sale_date), count(DISTINCT source_file)
       INTO v_fq, v_fk, v_ff FROM fakt_savdo;
@@ -417,7 +436,7 @@ BEGIN
     SELECT v_last, p_gorizont, p_ustama, p_kalibr,
            count(DISTINCT product), sum(qty), min(target_date), max(target_date),
            v_fq, v_fk, v_ff, v_yq, v_yk, C_WAPE, p_izoh
-    FROM fn_prognoz(NULL, p_gorizont, p_ustama, p_kalibr)
+    FROM fn_prognoz(NULL, p_gorizont, p_ustama, p_kalibr, p_boshlanish)
     RETURNING run_id INTO v_run;
 
     INSERT INTO reja_daily (run_id, product_id, target_date, dow, step,
@@ -428,7 +447,7 @@ BEGIN
            ROUND(f.qty * (1 - COALESCE(a.xato, 0.20)), 2),
            ROUND(f.qty * (1 + COALESCE(a.xato, 0.20)), 2),
            f.daraja, f.mavsum, f.dow_ix, f.ustama
-    FROM fn_prognoz(NULL, p_gorizont, p_ustama, p_kalibr) f
+    FROM fn_prognoz(NULL, p_gorizont, p_ustama, p_kalibr, p_boshlanish) f
     JOIN products pr ON pr.name = f.product
     LEFT JOIN v_mahsulot_aniqlik a ON a.product = f.product;
 
