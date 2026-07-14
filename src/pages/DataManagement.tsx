@@ -6,23 +6,27 @@ import {
 } from 'lucide-react'
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns'
 
+import { adminSarlavha } from '../api/admin'
+
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
 
+// Bu bo'limga faqat admin kiradi, lekin so'rovni server ham tekshiradi —
+// shuning uchun har birida parol sarlavhasi ketadi.
 async function apiGet(path: string) {
-  const r = await fetch(`${BASE}${path}`)
+  const r = await fetch(`${BASE}${path}`, { headers: adminSarlavha() })
   if (!r.ok) throw new Error(r.statusText)
   return r.json()
 }
 async function apiPost(path: string, params: Record<string, string> = {}) {
   const q = new URLSearchParams(params)
-  const r = await fetch(`${BASE}${path}?${q}`, { method: 'POST' })
+  const r = await fetch(`${BASE}${path}?${q}`, { method: 'POST', headers: adminSarlavha() })
   if (!r.ok) throw new Error(r.statusText)
   return r.json()
 }
 async function apiDelete(path: string, params: Record<string, string> = {}) {
   const q = new URLSearchParams(params)
   const url = Object.keys(params).length ? `${BASE}${path}?${q}` : `${BASE}${path}`
-  const r = await fetch(url, { method: 'DELETE' })
+  const r = await fetch(url, { method: 'DELETE', headers: adminSarlavha() })
   if (!r.ok) throw new Error(r.statusText)
   return r.json()
 }

@@ -14,9 +14,14 @@ Uchta qat'iy qoida:
   1. Yangi ma'lumot yuklanishi prognozni O'ZGARTIRMAYDI
   2. Qayta hisoblash faqat QO'LDA
   3. Arxiv o'zgarmas — o'chirib ham, tahrirlab ham bo'lmaydi
+
+Ruxsat:
+  Butun prognoz bo'limi ADMIN uchun. Mehmon faqat savdo analitikasini ko'radi.
+  `admin` qo'riqchisi analitika tomonidagi yozuvchi endpointlarda ham ishlatiladi.
 """
 from . import db                    # noqa: F401
+from .auth import admin             # noqa: F401  (main.py ham foydalanadi)
 from .router import router          # noqa: F401
 from . import router2               # noqa: F401  (endpointlarni router'ga qo'shadi)
 
-__all__ = ["router", "db"]
+__all__ = ["router", "db", "admin"]

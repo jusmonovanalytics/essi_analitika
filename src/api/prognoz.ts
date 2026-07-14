@@ -9,19 +9,40 @@
  *   3. Arxiv o'zgarmas — har hisob va tahrir yangi versiya yaratadi
  *   4. Bazani o'zgartiradigan har bir amal admin parolini talab qiladi
  */
-import { parolOl } from './admin'
+import { adminSarlavha, parolOl } from './admin'
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
 const P = `${BASE}/api/prognoz`
 
+/** Prognozning O'QISH so'rovlari ham admin uchun — mehmon bu bo'limni ko'rmaydi.
+ *  Bu yerda parol SO'RALMAYDI: bo'limga faqat kirgan admin tushadi, va bir necha
+ *  so'rov bir vaqtda ketgani uchun bir nechta oyna ochilib ketardi. */
 async function get<T>(path: string, params: Record<string, string | number | boolean | null | undefined> = {}): Promise<T> {
   const q = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {
     if (v != null && v !== '') q.set(k, String(v))
   }
-  const res = await fetch(`${P}${path}${q.toString() ? '?' + q : ''}`)
+  const res = await fetch(`${P}${path}${q.toString() ? '?' + q : ''}`,
+                          { headers: adminSarlavha() })
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? `${res.status}`)
   return res.json()
+}
+
+/** Excel yuklab olish.
+ *  Oddiy <a href> ishlamaydi — brauzer havolaga sarlavha qo'sha olmaydi,
+ *  server esa parolsiz 401 qaytaradi. Shuning uchun fayl fetch bilan olinib,
+ *  blob orqali saqlanadi. */
+export async function eksport(path: string, nom: string) {
+  const res = await fetch(`${P}${path}`, { headers: adminSarlavha() })
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? `${res.status}`)
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nom
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 /**
@@ -178,7 +199,8 @@ export const fetchArxivPivot = (id: number, round_to = 50) =>
   get<Pivot & { faol: boolean; qolda: boolean; ozgartirilgan: number }>(
     `/arxiv/${id}/pivot`, { round_to })
 
-export const arxivEksportURL = (id: number) => `${P}/arxiv/${id}/eksport`
+export const arxivEksport = (id: number) =>
+  eksport(`/arxiv/${id}/eksport`, `prognoz-run-${id}.xlsx`)
 export const fetchHolat = () => get<Holat>('/holat')
 export const fetchFayllar = (manba: 'fakt' | 'yakuniy') => get<Fayllar>('/fayllar', { manba })
 export const fetchChiqarilgan = () => get<Chiqarilgan[]>('/chiqarilgan')
@@ -240,8 +262,9 @@ export async function yukla(files: File[], manba: 'fakt' | 'yakuniy', replace: b
   return json as YuklashNatija
 }
 
-export const eksportURL = (dokon?: string | null, usul?: string | null) => {
+export const rejaEksport = (dokon?: string | null, usul?: string | null) => {
   const q = new URLSearchParams()
   if (dokon) { q.set('dokon', dokon); if (usul) q.set('usul', usul) }
-  return `${P}/eksport${q.toString() ? '?' + q : ''}`
+  return eksport(`/eksport${q.toString() ? '?' + q : ''}`,
+                 dokon ? `prognoz-${dokon}.xlsx` : 'prognoz.xlsx')
 }

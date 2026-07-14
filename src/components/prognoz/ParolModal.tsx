@@ -83,9 +83,9 @@ export function ParolModal() {
         </div>
 
         <div className="text-[11px] text-slate-500 leading-relaxed mb-3">
-          Bu amal bazani o'zgartiradi — prognozni qayta hisoblash, qo'lda tahrir,
-          arxivdagi rejaga qaytish va Excel ma'lumotlarini yuklash/o'chirish
-          parol talab qiladi. Parol brauzer varag'i yopilguncha eslab qolinadi.
+          Admin savdo prognozi va ma'lumotlar bo'limlaridan to'liq foydalanadi.
+          Parolsiz siz mehmonsiz — faqat savdo analitikasi ko'rinadi.
+          Parol brauzer varag'i yopilguncha eslab qolinadi.
         </div>
 
         <input

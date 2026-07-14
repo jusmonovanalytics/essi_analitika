@@ -10,8 +10,33 @@
  */
 const KALIT = 'essi_admin_parol'
 
-export const parolBor = () => sessionStorage.getItem(KALIT) != null
+/** Saqlangan parol yoki null. Har bir so'rovga sarlavha sifatida qo'shiladi. */
+export const parolQiymati = () => sessionStorage.getItem(KALIT)
+export const parolBor = () => parolQiymati() != null
 export const parolniUnut = () => sessionStorage.removeItem(KALIT)
+
+/** Saqlangan parolni serverda tekshiradi. Sahifa ochilganda chaqiriladi. */
+export async function adminmi(): Promise<boolean> {
+  const p = parolQiymati()
+  if (!p) return false
+  try {
+    const base = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
+    const res = await fetch(`${base}/api/prognoz/parol`, {
+      method: 'POST', headers: { 'X-Admin-Parol': p },
+    })
+    if (res.ok) return true
+    parolniUnut()          // eskirgan yoki noto'g'ri — saqlab turishning ma'nosi yo'q
+    return false
+  } catch {
+    return false           // server yiqilgan — admin deb hisoblamaymiz
+  }
+}
+
+/** Har qanday so'rovga qo'shiladigan sarlavha (parol bo'lmasa — bo'sh). */
+export const adminSarlavha = (): Record<string, string> => {
+  const p = parolQiymati()
+  return p ? { 'X-Admin-Parol': p } : {}
+}
 
 /** Foydalanuvchi hech narsa kiritmasdan oynani yopganda tashlanadi. */
 export class ParolBekor extends Error {

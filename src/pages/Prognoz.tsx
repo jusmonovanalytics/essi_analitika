@@ -16,8 +16,8 @@ import {
 } from 'lucide-react'
 
 import {
-  eksportURL, fetchDokon, fetchPivot, fetchPlan, fetchSummary,
-  hisobla, tahrirla, type Tahrir,
+  fetchDokon, fetchPivot, fetchPlan, fetchSummary,
+  hisobla, rejaEksport, tahrirla, type Tahrir,
 } from '../api/prognoz'
 import { MahsulotModal } from '../components/prognoz/MahsulotModal'
 import { fmt } from '../utils/formatters'
@@ -251,11 +251,11 @@ export default function Prognoz() {
           Qayta hisoblash
         </button>
 
-        <a href={eksportURL(dokon || null, dokon ? usul : null)}
+        <button onClick={() => rejaEksport(dokon || null, dokon ? usul : null)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
           style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)', color: '#34d399' }}>
           <Download size={12} /> Excel
-        </a>
+        </button>
       </div>
 
       {/* ═══ Kontent ═══

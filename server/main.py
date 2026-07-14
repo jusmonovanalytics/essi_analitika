@@ -27,7 +27,9 @@ if _env.exists():
             k, v = line.split("=", 1)
             os.environ.setdefault(k.strip(), v.strip())
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Query, Request
+from fastapi import (
+    Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -352,7 +354,7 @@ async def data_status():
     return await db.get_data_status()
 
 
-@app.post("/api/data/load")
+@app.post("/api/data/load", dependencies=[Depends(prognoz.admin)])
 async def data_load(
     date_from:       str = Query(...,    alias="dateFrom"),
     date_to:         str = Query(...,    alias="dateTo"),
@@ -375,7 +377,7 @@ async def data_load(
     return {"status": "started", "date_from": date_from, "date_to": date_to, "date_field": date_field}
 
 
-@app.post("/api/data/stop")
+@app.post("/api/data/stop", dependencies=[Depends(prognoz.admin)])
 async def data_stop():
     """Cancel the currently running sync task."""
     global active_load_task
@@ -385,14 +387,14 @@ async def data_stop():
     return {"status": "no_active_sync"}
 
 
-@app.post("/api/data/stop/{log_id}")
+@app.post("/api/data/stop/{log_id}", dependencies=[Depends(prognoz.admin)])
 async def data_stop_log(log_id: int):
     """Force-cancel a specific running log entry (e.g. orphaned from previous run)."""
     await db.cancel_sync_log(log_id)
     return {"status": "cancelled", "log_id": log_id}
 
 
-@app.post("/api/data/cleanup")
+@app.post("/api/data/cleanup", dependencies=[Depends(prognoz.admin)])
 async def data_cleanup(
     before_date: str = Query(..., alias="beforeDate"),
 ):
@@ -406,7 +408,7 @@ async def data_cleanup(
     return {"deleted": deleted, "before_date": before_date}
 
 
-@app.post("/api/data/refresh-views")
+@app.post("/api/data/refresh-views", dependencies=[Depends(prognoz.admin)])
 async def data_refresh_views():
     """Manually refresh all materialized views."""
     await analytics.refresh_views()
@@ -418,13 +420,13 @@ async def data_logs(limit: int = Query(30, ge=1, le=500)):
     return await db.get_sync_logs(limit)
 
 
-@app.delete("/api/data/logs/{log_id}")
+@app.delete("/api/data/logs/{log_id}", dependencies=[Depends(prognoz.admin)])
 async def delete_log(log_id: int):
     await db.delete_sync_log(log_id)
     return {"deleted": log_id}
 
 
-@app.delete("/api/data/logs")
+@app.delete("/api/data/logs", dependencies=[Depends(prognoz.admin)])
 async def delete_all_logs():
     count = await db.delete_all_sync_logs()
     return {"deleted": count}
@@ -438,7 +440,7 @@ async def data_autosync_status():
     return {"running": running, "today": _today(), "today_count": today_count}
 
 
-@app.delete("/api/data/range")
+@app.delete("/api/data/range", dependencies=[Depends(prognoz.admin)])
 async def data_delete_range(
     date_from:  str = Query(..., alias="dateFrom"),
     date_to:    str = Query(..., alias="dateTo"),
@@ -460,7 +462,7 @@ async def data_delete_range(
     return {"deleted": deleted, "date_from": date_from, "date_to": date_to}
 
 
-@app.delete("/api/data/all")
+@app.delete("/api/data/all", dependencies=[Depends(prognoz.admin)])
 async def data_delete_all(confirm: str = Query("")):
     """Delete ALL orders. Requires confirm=yes. Stops auto-sync."""
     global sync_task
@@ -479,7 +481,7 @@ async def data_duplicates():
     return await db.get_duplicate_stats()
 
 
-@app.post("/api/data/duplicates/clean")
+@app.post("/api/data/duplicates/clean", dependencies=[Depends(prognoz.admin)])
 async def data_clean_duplicates():
     cleaned = await db.clean_duplicates()
     if cleaned > 0:

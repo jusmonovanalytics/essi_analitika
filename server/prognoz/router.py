@@ -16,13 +16,19 @@ import json
 import os
 from datetime import timedelta
 
-from fastapi import APIRouter, Body, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from . import db
+from .auth import admin
 from .loader import BadFile, load_fakt, load_yakuniy, read_workbook
 
-router = APIRouter(prefix="/api/prognoz", tags=["prognoz"])
+# BUTUN prognoz bo'limi admin uchun — o'qish ham, yozish ham.
+# Mehmon faqat savdo analitikasini ko'radi; prognoz unga umuman ochilmaydi.
+# Faqat interfeysda yashirish yetarli emas: API manzili ochiq, kimdir
+# to'g'ridan-to'g'ri so'rov yuborishi mumkin edi.
+router = APIRouter(prefix="/api/prognoz", tags=["prognoz"],
+                   dependencies=[Depends(admin)])
 
 # Do'kon turi bo'yicha bo'lish usullari (backtest: 36 origin, 720 mahsulot × tur)
 USULLAR = {

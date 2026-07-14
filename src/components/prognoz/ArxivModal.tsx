@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, History, Loader2, RotateCcw, X } from 'lucide-react'
 
 import {
-  arxivEksportURL, faollashtir, fetchArxivPivot, fetchArxivRun,
+  arxivEksport, faollashtir, fetchArxivPivot, fetchArxivRun,
 } from '../../api/prognoz'
 import { fmt } from '../../utils/formatters'
 
@@ -131,11 +131,11 @@ export function ArxivModal({ runId, onClose }: { runId: number; onClose: () => v
 
               <div className="flex-1" />
 
-              <a href={arxivEksportURL(runId)}
+              <button onClick={() => arxivEksport(runId)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium"
                 style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)', color: '#34d399' }}>
                 <Download size={11} /> Excel
-              </a>
+              </button>
 
               {!r.faol && (
                 <button onClick={() => m.mutate()} disabled={m.isPending}
