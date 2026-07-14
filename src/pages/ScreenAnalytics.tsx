@@ -27,14 +27,22 @@ const RANK_COLORS = ['#F59E0B','#94A3B8','#F97316','#3B82F6','#6366F1','#8B5CF6'
 // ─── Filter Bar ────────────────────────────────────────────────────────────────
 
 function FilterBar() {
-  const { dateRange, setCustomRange, setDatePreset } = useAppStore()
+  const { dateRange, setCustomRange, setDatePreset, dateField, setDateField } = useAppStore()
   const today = new Date().toISOString().slice(0, 10)
+  const yetkazish = dateField === 'date_delivery'
 
   const DATE_PRESETS: { label: string; key: DatePreset }[] = [
     { label: 'Bugun',   key: 'today'     },
     { label: 'Kecha',   key: 'yesterday' },
     { label: 'Hafta',   key: 'week'      },
     { label: 'Oy',      key: 'month'     },
+  ]
+
+  const KUNLAR: { label: string; key: 'created_date' | 'date_delivery'; izoh: string }[] = [
+    { label: 'Yaratilgan', key: 'created_date',
+      izoh: 'Buyurtma qabul qilingan kun bo\'yicha' },
+    { label: 'Yetkazish',  key: 'date_delivery',
+      izoh: 'Buyurtma yetkazilgan kun bo\'yicha — aksari ertasi kunga to\'g\'ri keladi' },
   ]
 
   return (
@@ -53,10 +61,32 @@ function FilterBar() {
           className="text-xs font-mono outline-none bg-transparent border-none"
           style={{ color:'#93c5fd', colorScheme:'dark', width:102 }} />
         <span className="text-slate-700 text-xs">—</span>
-        <input type="date" value={dateRange.to} min={dateRange.from} max={today}
+        {/* Yetkazish sanasi kelajakda bo'lishi mumkin (buyurtma bugun, yetkazish ertaga),
+            shuning uchun bu rejimda "bugun" chegarasi olib tashlanadi. */}
+        <input type="date" value={dateRange.to} min={dateRange.from}
+          max={yetkazish ? undefined : today}
           onChange={e => setCustomRange(dateRange.from, e.target.value)}
           className="text-xs font-mono outline-none bg-transparent border-none"
           style={{ color:'#93c5fd', colorScheme:'dark', width:102 }} />
+      </div>
+
+      {/* ── Sana turi: buyurtma yaratilgan kun / yetkazilgan kun ── */}
+      <div className="flex gap-0.5 rounded-md p-0.5"
+        style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.05)' }}>
+        {KUNLAR.map(k => {
+          const act = dateField === k.key
+          return (
+            <button key={k.key} onClick={() => setDateField(k.key)} title={k.izoh}
+              className="px-2.5 py-1 rounded text-xs font-semibold transition-all"
+              style={{
+                background: act ? 'rgba(235,104,52,0.18)' : 'transparent',
+                color:      act ? '#fdba74' : '#374151',
+                boxShadow:  act ? 'inset 0 0 0 1px rgba(235,104,52,0.3)' : 'none',
+              }}>
+              {k.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* ── Quick date presets ── */}
@@ -204,12 +234,13 @@ function TopBar({ onGoToData, showFilters, onToggleFilters }: {
 }) {
   const t = useT()
   const { lang, setLang } = useLangStore()
-  const { wsConnected, filters } = useAppStore()
+  const { wsConnected, filters, dateField } = useAppStore()
   const [spin, setSpin] = useState(false)
   const qc = useQueryClient()
   const refresh = () => { setSpin(true); qc.invalidateQueries(); setTimeout(() => setSpin(false), 900) }
 
   const activeFilterCount = Object.values(filters).filter(v => Array.isArray(v) ? v.length > 0 : v !== null).length
+  const yetkazish = dateField === 'date_delivery'
 
   return (
     <div className="flex items-center gap-2.5 px-5 py-2 flex-shrink-0" style={{
@@ -247,6 +278,21 @@ function TopBar({ onGoToData, showFilters, onToggleFilters }: {
           </span>
         )}
       </button>
+
+      {/* Yetkazish sanasi rejimi — filtr paneli yopiq bo'lsa ham bilinib tursin,
+          chunki bu barcha raqamlarni o'zgartiradi. */}
+      {yetkazish && (
+        <span className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border"
+          title="Sanalar yetkazish kuni bo'yicha hisoblanmoqda"
+          style={{
+            background: 'rgba(235,104,52,0.1)',
+            borderColor: 'rgba(235,104,52,0.3)',
+            color: '#fdba74',
+          }}>
+          <CalendarDays size={11} />
+          Yetkazish sanasi
+        </span>
+      )}
 
       <div className="flex-1" />
 

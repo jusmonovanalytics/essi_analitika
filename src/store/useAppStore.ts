@@ -129,7 +129,11 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: 'essi-store',
-      partialize: (s) => ({ theme: s.theme, sidebarCollapsed: s.sidebarCollapsed }),
+      partialize: (s) => ({
+        theme: s.theme,
+        sidebarCollapsed: s.sidebarCollapsed,
+        dateField: s.dateField,      // sana turi tanlovi eslab qolinadi
+      }),
       onRehydrateStorage: () => (state) => {
         if (state) applyTheme(state.theme)
       },

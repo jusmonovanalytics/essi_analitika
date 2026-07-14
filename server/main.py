@@ -193,9 +193,11 @@ async def kpis(
     payment_type:    Optional[str] = Query(None, alias="paymentType"),
     delivery_man_id: Optional[str] = Query(None, alias="deliveryManId"),
     status:          Optional[str] = Query(None),
+    kun:             str           = Query("created_date", alias="dateField",
+                                           pattern="^(created_date|date_delivery)$"),
 ):
     """KPI summary + comparison vs previous equivalent period."""
-    return await analytics.get_kpis(date_from, date_to, _ints(agent_id), _strs(region), _strs(payment_type), _ints(delivery_man_id), _strs(status))
+    return await analytics.get_kpis(date_from, date_to, _ints(agent_id), _strs(region), _strs(payment_type), _ints(delivery_man_id), _strs(status), kun)
 
 
 @app.get("/api/agents")
@@ -206,9 +208,11 @@ async def agents(
     payment_type:    Optional[str] = Query(None, alias="paymentType"),
     delivery_man_id: Optional[str] = Query(None, alias="deliveryManId"),
     status:          Optional[str] = Query(None),
+    kun:             str           = Query("created_date", alias="dateField",
+                                           pattern="^(created_date|date_delivery)$"),
 ):
     """Agent marathon — rankings with order counts, sums, delivered/pending."""
-    return await analytics.get_agents(date_from, date_to, _strs(region), _strs(payment_type), _ints(delivery_man_id), _strs(status))
+    return await analytics.get_agents(date_from, date_to, _strs(region), _strs(payment_type), _ints(delivery_man_id), _strs(status), kun)
 
 
 @app.get("/api/deliveries")
@@ -219,9 +223,11 @@ async def deliveries(
     region:       Optional[str] = Query(None),
     payment_type: Optional[str] = Query(None, alias="paymentType"),
     status:       Optional[str] = Query(None),
+    kun:          str           = Query("created_date", alias="dateField",
+                                        pattern="^(created_date|date_delivery)$"),
 ):
     """Top-10 delivery men by order count."""
-    return await analytics.get_deliveries(date_from, date_to, _ints(agent_id), _strs(region), _strs(payment_type), _strs(status))
+    return await analytics.get_deliveries(date_from, date_to, _ints(agent_id), _strs(region), _strs(payment_type), _strs(status), kun)
 
 
 @app.get("/api/live")
@@ -234,10 +240,12 @@ async def live_orders(
     payment_type:    Optional[str] = Query(None, alias="paymentType"),
     delivery_man_id: Optional[str] = Query(None, alias="deliveryManId"),
     status:          Optional[str] = Query(None),
+    kun:             str           = Query("created_date", alias="dateField",
+                                           pattern="^(created_date|date_delivery)$"),
 ):
     """Latest N orders for the live feed."""
     return await analytics.get_live_orders(
-        date_from, date_to, limit, _ints(agent_id), _strs(region), _strs(payment_type), _ints(delivery_man_id), _strs(status)
+        date_from, date_to, limit, _ints(agent_id), _strs(region), _strs(payment_type), _ints(delivery_man_id), _strs(status), kun
     )
 
 
@@ -250,9 +258,11 @@ async def charts(
     payment_type:    Optional[str] = Query(None, alias="paymentType"),
     delivery_man_id: Optional[str] = Query(None, alias="deliveryManId"),
     status:          Optional[str] = Query(None),
+    kun:             str           = Query("created_date", alias="dateField",
+                                           pattern="^(created_date|date_delivery)$"),
 ):
     """All chart data: hourly, daily, regional, payments, agent chart."""
-    return await analytics.get_charts(date_from, date_to, _ints(agent_id), _strs(region), _strs(payment_type), _ints(delivery_man_id), _strs(status))
+    return await analytics.get_charts(date_from, date_to, _ints(agent_id), _strs(region), _strs(payment_type), _ints(delivery_man_id), _strs(status), kun)
 
 
 @app.get("/api/clients")
@@ -265,10 +275,12 @@ async def clients(
     delivery_man_id: Optional[str] = Query(None, alias="deliveryManId"),
     limit:           int           = Query(20, ge=1, le=50),
     status:          Optional[str] = Query(None),
+    kun:             str           = Query("created_date", alias="dateField",
+                                           pattern="^(created_date|date_delivery)$"),
 ):
     """Top-N clients by total sum."""
     return await analytics.get_clients(
-        date_from, date_to, _ints(agent_id), _strs(region), _strs(payment_type), _ints(delivery_man_id), limit, _strs(status)
+        date_from, date_to, _ints(agent_id), _strs(region), _strs(payment_type), _ints(delivery_man_id), limit, _strs(status), kun
     )
 
 
@@ -277,9 +289,11 @@ async def charts_extended(
     date_from: str           = Query(_today(), alias="dateFrom"),
     date_to:   str           = Query(_today(), alias="dateTo"),
     status:    Optional[str] = Query(None),
+    kun:       str           = Query("created_date", alias="dateField",
+                                     pattern="^(created_date|date_delivery)$"),
 ):
     """Weekday distribution + market type breakdown."""
-    return await analytics.get_charts_extended(date_from, date_to, _strs(status))
+    return await analytics.get_charts_extended(date_from, date_to, _strs(status), kun)
 
 
 @app.get("/api/deliveries-extended")
@@ -291,10 +305,12 @@ async def deliveries_extended(
     payment_type: Optional[str] = Query(None, alias="paymentType"),
     status:       Optional[str] = Query(None),
     limit:        int           = Query(30, ge=1, le=100),
+    kun:          str           = Query("created_date", alias="dateField",
+                                        pattern="^(created_date|date_delivery)$"),
 ):
     """Full delivery men list with weight and zone stats."""
     return await analytics.get_deliveries_extended(
-        date_from, date_to, _ints(agent_id), _strs(region), _strs(payment_type), _strs(status), limit
+        date_from, date_to, _ints(agent_id), _strs(region), _strs(payment_type), _strs(status), limit, kun
     )
 
 
@@ -302,18 +318,22 @@ async def deliveries_extended(
 async def status_stats(
     date_from: str = Query(_today(), alias="dateFrom"),
     date_to:   str = Query(_today(), alias="dateTo"),
+    kun:       str           = Query("created_date", alias="dateField",
+                                     pattern="^(created_date|date_delivery)$"),
 ):
     """Order count breakdown by status (excluding status=4 Returned)."""
-    return await analytics.get_status_stats(date_from, date_to)
+    return await analytics.get_status_stats(date_from, date_to, kun)
 
 
 @app.get("/api/filters")
 async def filter_options(
     date_from: str = Query(_today(), alias="dateFrom"),
     date_to:   str = Query(_today(), alias="dateTo"),
+    kun:       str           = Query("created_date", alias="dateField",
+                                     pattern="^(created_date|date_delivery)$"),
 ):
     """Available filter values for the current period."""
-    return await analytics.get_filter_options(date_from, date_to)
+    return await analytics.get_filter_options(date_from, date_to, kun)
 
 
 # ─── Orders (paginated raw list for Orders page) ─────────────────────────────

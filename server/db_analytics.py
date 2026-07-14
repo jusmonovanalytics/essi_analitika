@@ -21,6 +21,26 @@ def _cache_key(*parts) -> str:
 
 # ─── One-time setup ──────────────────────────────────────────────────────────
 
+def _strip_leading_comments(stmt: str) -> str:
+    """Ifodaning boshidagi izoh va bo'sh qatorlarni olib tashlaydi.
+
+    Har bir ifoda oldingi `;` dan keyin boshlanadi, ya'ni bo'lakka keyingi
+    ifodadan oldingi sarlavha izohlari ham tushadi:
+
+        $$;
+        -- ─── Agent Rankings ───
+        CREATE FUNCTION fn_agent_stats(...)
+
+    Bunday bo'lakni butunlay tashlab yuborish MUMKIN EMAS — u bilan birga
+    CREATE FUNCTION ham yo'qoladi. Faqat boshidagi izohlarni kesamiz; ifoda
+    ICHIDAGI izohlar joyida qoladi.
+    """
+    lines = stmt.splitlines()
+    while lines and (not lines[0].strip() or lines[0].lstrip().startswith("--")):
+        lines.pop(0)
+    return "\n".join(lines).strip()
+
+
 def _split_sql(sql: str) -> list[str]:
     """Split SQL into individual statements, respecting $$ body blocks."""
     stmts: list[str] = []
@@ -33,16 +53,16 @@ def _split_sql(sql: str) -> list[str]:
             buf.append("$$")
             i += 2
         elif sql[i] == ";" and not in_dollar:
-            stmt = "".join(buf).strip()
-            if stmt and not stmt.startswith("--"):
+            stmt = _strip_leading_comments("".join(buf))
+            if stmt:
                 stmts.append(stmt)
             buf.clear()
             i += 1
         else:
             buf.append(sql[i])
             i += 1
-    leftover = "".join(buf).strip()
-    if leftover and not leftover.startswith("--"):
+    leftover = _strip_leading_comments("".join(buf))
+    if leftover:
         stmts.append(leftover)
     return stmts
 
@@ -97,8 +117,9 @@ async def get_kpis(
     payment_types: list[str] | None = None,
     delivery_man_ids: list[int] | None = None,
     statuses: list[str] | None = None,
+    kun: str = "created_date",
 ) -> dict:
-    ck = _cache_key("kpis", date_from, date_to, agent_ids, regions, payment_types, delivery_man_ids, statuses)
+    ck = _cache_key(kun, "kpis", date_from, date_to, agent_ids, regions, payment_types, delivery_man_ids, statuses)
     cached = analytics_cache.get(ck)
     if cached is not None:
         return cached
@@ -109,15 +130,15 @@ async def get_kpis(
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
-                "SELECT * FROM fn_kpis(%s,%s,%s::int[],%s::text[],%s::text[],%s::int[],%s::text[])",
-                [date_from, date_to] + args,
+                "SELECT * FROM fn_kpis(%s,%s,%s::int[],%s::text[],%s::text[],%s::int[],%s::text[],%s::text)",
+                [date_from, date_to] + args + [kun],
             )
             curr = await cur.fetchone()
             await cur.execute(
                 "SELECT total_orders,total_sum,avg_check,active_agents,"
                 "       delivered_orders,delivery_rate"
-                " FROM fn_kpis(%s,%s,%s::int[],%s::text[],%s::text[],%s::int[],%s::text[])",
-                [pf, pt] + args,
+                " FROM fn_kpis(%s,%s,%s::int[],%s::text[],%s::text[],%s::int[],%s::text[],%s::text)",
+                [pf, pt] + args + [kun],
             )
             prev = await cur.fetchone()
 
@@ -155,8 +176,9 @@ async def get_agents(
     payment_types: list[str] | None = None,
     delivery_man_ids: list[int] | None = None,
     statuses: list[str] | None = None,
+    kun: str = "created_date",
 ) -> list[dict]:
-    ck = _cache_key("agents", date_from, date_to, regions, payment_types, delivery_man_ids, statuses)
+    ck = _cache_key(kun, "agents", date_from, date_to, regions, payment_types, delivery_man_ids, statuses)
     cached = analytics_cache.get(ck)
     if cached is not None:
         return cached
@@ -165,8 +187,8 @@ async def get_agents(
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
-                "SELECT * FROM fn_agent_stats(%s,%s,%s::text[],%s::text[],%s::int[],%s::text[])",
-                [date_from, date_to, regions, payment_types, delivery_man_ids, statuses],
+                "SELECT * FROM fn_agent_stats(%s,%s,%s::text[],%s::text[],%s::int[],%s::text[],%s::text)",
+                [date_from, date_to, regions, payment_types, delivery_man_ids, statuses, kun],
             )
             rows = await cur.fetchall()
     result = [
@@ -198,13 +220,14 @@ async def get_deliveries(
     regions: list[str] | None = None,
     payment_types: list[str] | None = None,
     statuses: list[str] | None = None,
+    kun: str = "created_date",
 ) -> list[dict]:
     pool = await get_pool()
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
-                "SELECT * FROM fn_delivery_stats(%s,%s,%s::int[],%s::text[],%s::text[],%s::text[])",
-                [date_from, date_to, agent_ids, regions, payment_types, statuses],
+                "SELECT * FROM fn_delivery_stats(%s,%s,%s::int[],%s::text[],%s::text[],%s::text[],%s::text)",
+                [date_from, date_to, agent_ids, regions, payment_types, statuses, kun],
             )
             rows = await cur.fetchall()
     return [
@@ -231,8 +254,10 @@ async def get_live_orders(
     payment_types: list[str] | None = None,
     delivery_man_ids: list[int] | None = None,
     statuses: list[str] | None = None,
+    kun: str = "created_date",
 ) -> list[dict]:
-    conditions = ["created_date::date BETWEEN %s AND %s", "status != '4'"]
+    ustun = "date_delivery" if kun == "date_delivery" else "created_date::date"
+    conditions = [f"{ustun} BETWEEN %s AND %s", "status != '4'"]
     args: list = [date_from, date_to]
     if agent_ids:
         conditions.append("user_id = ANY(%s::int[])"); args.append(agent_ids)
@@ -284,8 +309,9 @@ async def get_charts(
     payment_types: list[str] | None = None,
     delivery_man_ids: list[int] | None = None,
     statuses: list[str] | None = None,
+    kun: str = "created_date",
 ) -> dict:
-    ck = _cache_key("charts", date_from, date_to, agent_ids, regions, payment_types, delivery_man_ids, statuses)
+    ck = _cache_key(kun, "charts", date_from, date_to, agent_ids, regions, payment_types, delivery_man_ids, statuses)
     cached = analytics_cache.get(ck)
     if cached is not None:
         return cached
@@ -295,28 +321,28 @@ async def get_charts(
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
             sql_7 = "%s,%s,%s::int[],%s::text[],%s::text[],%s::int[],%s::text[]"
-            await cur.execute(f"SELECT * FROM fn_hourly_stats({sql_7})", args_full)
+            await cur.execute(f"SELECT * FROM fn_hourly_stats({sql_7},%s::text)", args_full + [kun])
             hourly = await cur.fetchall()
 
-            await cur.execute(f"SELECT * FROM fn_daily_stats({sql_7})", args_full)
+            await cur.execute(f"SELECT * FROM fn_daily_stats({sql_7},%s::text)", args_full + [kun])
             daily = await cur.fetchall()
 
             await cur.execute(
-                "SELECT * FROM fn_regional_stats(%s,%s,%s::int[],%s::text[],%s::int[],%s::text[])",
-                [date_from, date_to, agent_ids, payment_types, delivery_man_ids, statuses],
+                "SELECT * FROM fn_regional_stats(%s,%s,%s::int[],%s::text[],%s::int[],%s::text[],%s::text)",
+                [date_from, date_to, agent_ids, payment_types, delivery_man_ids, statuses, kun],
             )
             regional = await cur.fetchall()
 
             await cur.execute(
-                "SELECT * FROM fn_payment_stats(%s,%s,%s::int[],%s::text[],%s::int[],%s::text[])",
-                [date_from, date_to, agent_ids, regions, delivery_man_ids, statuses],
+                "SELECT * FROM fn_payment_stats(%s,%s,%s::int[],%s::text[],%s::int[],%s::text[],%s::text)",
+                [date_from, date_to, agent_ids, regions, delivery_man_ids, statuses, kun],
             )
             payments = await cur.fetchall()
 
             await cur.execute(
                 "SELECT user_name, order_count, total_sum"
-                " FROM fn_agent_stats(%s,%s,%s::text[],%s::text[],%s::int[],%s::text[]) LIMIT 10",
-                [date_from, date_to, regions, payment_types, delivery_man_ids, statuses],
+                " FROM fn_agent_stats(%s,%s,%s::text[],%s::text[],%s::int[],%s::text[],%s::text) LIMIT 10",
+                [date_from, date_to, regions, payment_types, delivery_man_ids, statuses, kun],
             )
             agent_chart = await cur.fetchall()
 
@@ -376,13 +402,14 @@ async def get_clients(
     delivery_man_ids: list[int] | None = None,
     limit: int = 20,
     statuses: list[str] | None = None,
+    kun: str = "created_date",
 ) -> list[dict]:
     pool = await get_pool()
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
-                "SELECT * FROM fn_client_stats(%s,%s,%s::int[],%s::text[],%s::text[],%s::int[],%s,%s::text[])",
-                [date_from, date_to, agent_ids, regions, payment_types, delivery_man_ids, limit, statuses],
+                "SELECT * FROM fn_client_stats(%s,%s,%s::int[],%s::text[],%s::text[],%s::int[],%s,%s::text[],%s::text)",
+                [date_from, date_to, agent_ids, regions, payment_types, delivery_man_ids, limit, statuses, kun],
             )
             rows = await cur.fetchall()
     return [
@@ -402,8 +429,9 @@ async def get_charts_extended(
     date_from: str,
     date_to: str,
     statuses: list[str] | None = None,
+    kun: str = "created_date",
 ) -> dict:
-    ck = _cache_key("charts_ext", date_from, date_to, statuses)
+    ck = _cache_key(kun, "charts_ext", date_from, date_to, statuses)
     cached = analytics_cache.get(ck)
     if cached is not None:
         return cached
@@ -411,9 +439,11 @@ async def get_charts_extended(
     pool = await get_pool()
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute("SELECT * FROM fn_weekday_stats(%s,%s,%s::text[])", [date_from, date_to, statuses])
+            await cur.execute("SELECT * FROM fn_weekday_stats(%s,%s,%s::text[],%s::text)",
+                              [date_from, date_to, statuses, kun])
             weekday = await cur.fetchall()
-            await cur.execute("SELECT * FROM fn_market_type_stats(%s,%s,%s::text[])", [date_from, date_to, statuses])
+            await cur.execute("SELECT * FROM fn_market_type_stats(%s,%s,%s::text[],%s::text)",
+                              [date_from, date_to, statuses, kun])
             market_types = await cur.fetchall()
 
     result = {
@@ -451,8 +481,9 @@ async def get_deliveries_extended(
     payment_types: list[str] | None = None,
     statuses: list[str] | None = None,
     limit: int = 30,
+    kun: str = "created_date",
 ) -> list[dict]:
-    ck = _cache_key("del_ext", date_from, date_to, agent_ids, regions, payment_types, statuses, limit)
+    ck = _cache_key(kun, "del_ext", date_from, date_to, agent_ids, regions, payment_types, statuses, limit)
     cached = analytics_cache.get(ck)
     if cached is not None:
         return cached
@@ -461,8 +492,8 @@ async def get_deliveries_extended(
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
-                "SELECT * FROM fn_delivery_extended(%s,%s,%s::int[],%s::text[],%s::text[],%s::text[],%s)",
-                [date_from, date_to, agent_ids, regions, payment_types, statuses, limit],
+                "SELECT * FROM fn_delivery_extended(%s,%s,%s::int[],%s::text[],%s::text[],%s::text[],%s,%s::text)",
+                [date_from, date_to, agent_ids, regions, payment_types, statuses, limit, kun],
             )
             rows = await cur.fetchall()
 
@@ -485,8 +516,8 @@ async def get_deliveries_extended(
 
 # ─── Status Distribution ─────────────────────────────────────────────────────
 
-async def get_status_stats(date_from: str, date_to: str) -> list[dict]:
-    ck = _cache_key("status_stats", date_from, date_to)
+async def get_status_stats(date_from: str, date_to: str, kun: str = "created_date") -> list[dict]:
+    ck = _cache_key(kun, "status_stats", date_from, date_to)
     cached = analytics_cache.get(ck)
     if cached is not None:
         return cached
@@ -495,8 +526,8 @@ async def get_status_stats(date_from: str, date_to: str) -> list[dict]:
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
-                "SELECT * FROM fn_status_stats(%s,%s)",
-                [date_from, date_to],
+                "SELECT * FROM fn_status_stats(%s,%s,%s::text)",
+                [date_from, date_to, kun],
             )
             rows = await cur.fetchall()
 
@@ -515,17 +546,17 @@ async def get_status_stats(date_from: str, date_to: str) -> list[dict]:
 
 # ─── Filter Options ───────────────────────────────────────────────────────────
 
-async def get_filter_options(date_from: str, date_to: str) -> dict:
+async def get_filter_options(date_from: str, date_to: str, kun: str = "created_date") -> dict:
     pool = await get_pool()
     async with pool.connection() as conn:
         async with conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute("SELECT * FROM fn_filter_agents(%s,%s)", [date_from, date_to])
+            await cur.execute("SELECT * FROM fn_filter_agents(%s,%s,%s::text)", [date_from, date_to, kun])
             agents = await cur.fetchall()
 
-            await cur.execute("SELECT * FROM fn_filter_regions(%s,%s)", [date_from, date_to])
+            await cur.execute("SELECT * FROM fn_filter_regions(%s,%s,%s::text)", [date_from, date_to, kun])
             regions = await cur.fetchall()
 
-            await cur.execute("SELECT * FROM fn_filter_delivery_men(%s,%s)", [date_from, date_to])
+            await cur.execute("SELECT * FROM fn_filter_delivery_men(%s,%s,%s::text)", [date_from, date_to, kun])
             delivery_men = await cur.fetchall()
 
             # Payment types are a small distinct set — get globally

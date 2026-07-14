@@ -10,10 +10,12 @@ const LIVE_MS = 2 * 60 * 1000
 
 function useFilterState(): DateFilters {
   const dateRange = useAppStore(s => s.dateRange)
+  const dateField = useAppStore(s => s.dateField)
   const filters   = useAppStore(s => s.filters)
   return {
     dateFrom:       dateRange.from,
     dateTo:         dateRange.to,
+    dateField,
     agentId:        filters.agentId,
     region:         filters.region,
     paymentType:    filters.paymentType,
@@ -107,9 +109,10 @@ export function useClients(limit = 20) {
 // ─── Filter options ───────────────────────────────────────────────────────────
 export function useFilterOptions() {
   const dateRange = useAppStore(s => s.dateRange)
+  const dateField = useAppStore(s => s.dateField)
   return useQuery({
-    queryKey: ['filters', dateRange.from, dateRange.to],
-    queryFn: () => api.fetchFilterOptions(dateRange.from, dateRange.to),
+    queryKey: ['filters', dateRange.from, dateRange.to, dateField],
+    queryFn: () => api.fetchFilterOptions(dateRange.from, dateRange.to, dateField),
     staleTime: 5 * 60_000,
   })
 }
@@ -117,10 +120,12 @@ export function useFilterOptions() {
 // ─── Status distribution ─────────────────────────────────────────────────────
 export function useStatusStats() {
   const dateRange = useAppStore(s => s.dateRange)
+  const dateField = useAppStore(s => s.dateField)
   const ri = useRefetchInterval()
   return useQuery({
-    queryKey: ['statusStats', dateRange.from, dateRange.to],
-    queryFn: (): Promise<StatusPoint[]> => api.fetchStatusStats(dateRange.from, dateRange.to),
+    queryKey: ['statusStats', dateRange.from, dateRange.to, dateField],
+    queryFn: (): Promise<StatusPoint[]> =>
+      api.fetchStatusStats(dateRange.from, dateRange.to, dateField),
     refetchInterval: ri,
     refetchIntervalInBackground: true,
     staleTime: 60_000,
@@ -130,12 +135,13 @@ export function useStatusStats() {
 // ─── Extended charts (weekday + market type) ─────────────────────────────────
 export function useChartsExtended() {
   const dateRange = useAppStore(s => s.dateRange)
+  const dateField = useAppStore(s => s.dateField)
   const statusFilter = useAppStore(s => s.filters.statusFilter)
   const ri = useRefetchInterval()
   return useQuery({
-    queryKey: ['chartsExt', dateRange.from, dateRange.to, statusFilter],
+    queryKey: ['chartsExt', dateRange.from, dateRange.to, statusFilter, dateField],
     queryFn: (): Promise<ExtendedChartsData> =>
-      api.fetchChartsExtended(dateRange.from, dateRange.to, statusFilter),
+      api.fetchChartsExtended(dateRange.from, dateRange.to, statusFilter, dateField),
     refetchInterval: ri,
     refetchIntervalInBackground: true,
     staleTime: 60_000,

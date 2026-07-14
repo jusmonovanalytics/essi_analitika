@@ -26,6 +26,11 @@ CREATE INDEX IF NOT EXISTS idx_oc_active
     ON orders_cache (created_date)
     WHERE status != '4';
 
+-- Yetkazish sanasi bo'yicha filtrlash uchun (p_kun = 'date_delivery')
+CREATE INDEX IF NOT EXISTS idx_oc_delivery_date
+    ON orders_cache (date_delivery)
+    WHERE status != '4';
+
 -- ─── Materialized View: Daily Aggregates ─────────────────────────────────────
 -- Refreshed after each sync. Used for monthly/weekly charts.
 
@@ -56,7 +61,8 @@ BEGIN
     WHERE proname = ANY(ARRAY[
       'fn_kpis','fn_agent_stats','fn_delivery_stats','fn_hourly_stats',
       'fn_daily_stats','fn_regional_stats','fn_client_stats','fn_payment_stats',
-      'fn_weekday_stats','fn_market_type_stats','fn_delivery_extended'
+      'fn_weekday_stats','fn_market_type_stats','fn_delivery_extended',
+      'fn_filter_agents','fn_filter_regions','fn_filter_delivery_men','fn_status_stats'
     ])
     AND pronamespace = 'public'::regnamespace
   LOOP
@@ -71,7 +77,8 @@ CREATE FUNCTION fn_kpis(
     p_borders       TEXT[]  DEFAULT NULL,
     p_payment_types TEXT[]  DEFAULT NULL,
     p_delivery_ids  INT[]   DEFAULT NULL,
-    p_statuses      TEXT[]  DEFAULT NULL
+    p_statuses      TEXT[]  DEFAULT NULL,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
 )
 RETURNS TABLE (
     total_orders      BIGINT,
@@ -100,7 +107,8 @@ SELECT
     )                                                 AS delivery_rate
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND (p_user_ids      IS NULL OR user_id         = ANY(p_user_ids))
   AND (p_borders       IS NULL OR market_border   = ANY(p_borders))
   AND (p_payment_types IS NULL OR payment_type    = ANY(p_payment_types))
@@ -114,7 +122,8 @@ CREATE FUNCTION fn_agent_stats(
     p_borders       TEXT[]  DEFAULT NULL,
     p_payment_types TEXT[]  DEFAULT NULL,
     p_delivery_ids  INT[]   DEFAULT NULL,
-    p_statuses      TEXT[]  DEFAULT NULL
+    p_statuses      TEXT[]  DEFAULT NULL,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
 )
 RETURNS TABLE (
     user_id         INT,
@@ -145,7 +154,8 @@ SELECT
     ROUND(COALESCE(SUM(total_weight), 0)::numeric, 1)    AS total_weight
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND user_name IS NOT NULL AND user_name != ''
   AND (p_borders       IS NULL OR market_border   = ANY(p_borders))
   AND (p_payment_types IS NULL OR payment_type    = ANY(p_payment_types))
@@ -161,7 +171,8 @@ CREATE FUNCTION fn_delivery_stats(
     p_user_ids      INT[]  DEFAULT NULL,
     p_borders       TEXT[] DEFAULT NULL,
     p_payment_types TEXT[] DEFAULT NULL,
-    p_statuses      TEXT[] DEFAULT NULL
+    p_statuses      TEXT[] DEFAULT NULL,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
 )
 RETURNS TABLE (
     delivery_man_id   INT,
@@ -180,7 +191,8 @@ SELECT
     RANK() OVER (ORDER BY COUNT(*) DESC)              AS rank
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND delivery_man_id IS NOT NULL
   AND delivery_man_name IS NOT NULL AND delivery_man_name != ''
   AND (p_user_ids      IS NULL OR user_id       = ANY(p_user_ids))
@@ -198,7 +210,8 @@ CREATE FUNCTION fn_hourly_stats(
     p_borders       TEXT[] DEFAULT NULL,
     p_payment_types TEXT[] DEFAULT NULL,
     p_delivery_ids  INT[]  DEFAULT NULL,
-    p_statuses      TEXT[] DEFAULT NULL
+    p_statuses      TEXT[] DEFAULT NULL,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
 )
 RETURNS TABLE (
     hour        INT,
@@ -206,12 +219,15 @@ RETURNS TABLE (
     total_sum   NUMERIC
 ) LANGUAGE SQL STABLE AS $$
 SELECT
+    -- Soat DOIM buyurtma yaratilgan vaqtdan olinadi: date_delivery — sana,
+    -- unda soat yo'q. p_kun faqat qaysi kunlar tanlanishini o'zgartiradi.
     EXTRACT(HOUR FROM created_date)::int   AS hour,
     COUNT(*)                               AS order_count,
     COALESCE(SUM(fact_price), 0)          AS total_sum
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND (p_user_ids      IS NULL OR user_id         = ANY(p_user_ids))
   AND (p_borders       IS NULL OR market_border   = ANY(p_borders))
   AND (p_payment_types IS NULL OR payment_type    = ANY(p_payment_types))
@@ -228,7 +244,8 @@ CREATE FUNCTION fn_daily_stats(
     p_borders       TEXT[] DEFAULT NULL,
     p_payment_types TEXT[] DEFAULT NULL,
     p_delivery_ids  INT[]  DEFAULT NULL,
-    p_statuses      TEXT[] DEFAULT NULL
+    p_statuses      TEXT[] DEFAULT NULL,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
 )
 RETURNS TABLE (
     day         DATE,
@@ -237,19 +254,21 @@ RETURNS TABLE (
     avg_check   NUMERIC
 ) LANGUAGE SQL STABLE AS $$
 SELECT
-    created_date::date                                  AS day,
+    CASE WHEN p_kun = 'date_delivery' THEN date_delivery ELSE created_date::date END
+                                                        AS day,
     COUNT(*)                                            AS order_count,
     COALESCE(SUM(fact_price), 0)                       AS total_sum,
     ROUND(COALESCE(AVG(fact_price), 0)::numeric, 2)    AS avg_check
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND (p_user_ids      IS NULL OR user_id         = ANY(p_user_ids))
   AND (p_borders       IS NULL OR market_border   = ANY(p_borders))
   AND (p_payment_types IS NULL OR payment_type    = ANY(p_payment_types))
   AND (p_delivery_ids  IS NULL OR delivery_man_id = ANY(p_delivery_ids))
   AND (p_statuses      IS NULL OR status          = ANY(p_statuses))
-GROUP BY created_date::date
+GROUP BY CASE WHEN p_kun = 'date_delivery' THEN date_delivery ELSE created_date::date END
 ORDER BY day;
 $$;
 
@@ -259,7 +278,8 @@ CREATE FUNCTION fn_regional_stats(
     p_user_ids      INT[]  DEFAULT NULL,
     p_payment_types TEXT[] DEFAULT NULL,
     p_delivery_ids  INT[]  DEFAULT NULL,
-    p_statuses      TEXT[] DEFAULT NULL
+    p_statuses      TEXT[] DEFAULT NULL,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
 )
 RETURNS TABLE (
     region      TEXT,
@@ -274,7 +294,8 @@ SELECT
     ROUND(COALESCE(AVG(fact_price), 0)::numeric, 2)     AS avg_check
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND (p_user_ids      IS NULL OR user_id         = ANY(p_user_ids))
   AND (p_payment_types IS NULL OR payment_type    = ANY(p_payment_types))
   AND (p_delivery_ids  IS NULL OR delivery_man_id = ANY(p_delivery_ids))
@@ -291,7 +312,8 @@ CREATE FUNCTION fn_client_stats(
     p_payment_types TEXT[] DEFAULT NULL,
     p_delivery_ids  INT[]  DEFAULT NULL,
     p_limit         INT    DEFAULT 20,
-    p_statuses      TEXT[] DEFAULT NULL
+    p_statuses      TEXT[] DEFAULT NULL,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
 )
 RETURNS TABLE (
     client_id   INT,
@@ -306,7 +328,8 @@ SELECT
     COALESCE(SUM(fact_price), 0) AS total_sum
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND client_name IS NOT NULL AND client_name != ''
   AND (p_user_ids      IS NULL OR user_id         = ANY(p_user_ids))
   AND (p_borders       IS NULL OR market_border   = ANY(p_borders))
@@ -324,7 +347,8 @@ CREATE FUNCTION fn_payment_stats(
     p_user_ids     INT[]  DEFAULT NULL,
     p_borders      TEXT[] DEFAULT NULL,
     p_delivery_ids INT[]  DEFAULT NULL,
-    p_statuses     TEXT[] DEFAULT NULL
+    p_statuses     TEXT[] DEFAULT NULL,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
 )
 RETURNS TABLE (
     payment_type TEXT,
@@ -341,7 +365,8 @@ SELECT
     )                                                    AS share_pct
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND (p_user_ids     IS NULL OR user_id         = ANY(p_user_ids))
   AND (p_borders      IS NULL OR market_border   = ANY(p_borders))
   AND (p_delivery_ids IS NULL OR delivery_man_id = ANY(p_delivery_ids))
@@ -354,39 +379,50 @@ $$;
 -- (No function needed — direct query with LIMIT is fast enough)
 
 -- ─── Filter Options ──────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION fn_filter_agents(p_from DATE, p_to DATE)
+CREATE FUNCTION fn_filter_agents(p_from DATE, p_to DATE,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
+)
 RETURNS TABLE (user_id INT, user_name TEXT) LANGUAGE SQL STABLE AS $$
 SELECT DISTINCT user_id, user_name
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND user_name IS NOT NULL AND user_name != ''
 ORDER BY user_name;
 $$;
 
-CREATE OR REPLACE FUNCTION fn_filter_regions(p_from DATE, p_to DATE)
+CREATE FUNCTION fn_filter_regions(p_from DATE, p_to DATE,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
+)
 RETURNS TABLE (region TEXT) LANGUAGE SQL STABLE AS $$
 SELECT DISTINCT market_border AS region
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND market_border IS NOT NULL AND market_border != ''
 ORDER BY market_border;
 $$;
 
-CREATE OR REPLACE FUNCTION fn_filter_delivery_men(p_from DATE, p_to DATE)
+CREATE FUNCTION fn_filter_delivery_men(p_from DATE, p_to DATE,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
+)
 RETURNS TABLE (delivery_man_id INT, delivery_man_name TEXT) LANGUAGE SQL STABLE AS $$
 SELECT DISTINCT delivery_man_id, delivery_man_name
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND delivery_man_id IS NOT NULL
   AND delivery_man_name IS NOT NULL AND delivery_man_name != ''
 ORDER BY delivery_man_name;
 $$;
 
 -- ─── Status Distribution ─────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION fn_status_stats(p_from DATE, p_to DATE)
+CREATE FUNCTION fn_status_stats(p_from DATE, p_to DATE,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
+)
 RETURNS TABLE (
     status      TEXT,
     order_count BIGINT,
@@ -401,7 +437,8 @@ SELECT
         COUNT(*) * 100.0 / NULLIF(SUM(COUNT(*)) OVER (), 0)::numeric, 2
     )                                                     AS share_pct
 FROM orders_cache
-WHERE created_date::date BETWEEN p_from AND p_to
+WHERE CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND status != '4'
 GROUP BY status
 ORDER BY order_count DESC;
@@ -410,7 +447,8 @@ $$;
 -- ─── Weekday Distribution ────────────────────────────────────────────────────
 CREATE FUNCTION fn_weekday_stats(
     p_from DATE, p_to DATE,
-    p_statuses TEXT[] DEFAULT NULL
+    p_statuses TEXT[] DEFAULT NULL,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
 )
 RETURNS TABLE (
     weekday_num INT,
@@ -420,14 +458,17 @@ RETURNS TABLE (
     day_count   BIGINT
 ) LANGUAGE SQL STABLE AS $$
 SELECT
-    EXTRACT(ISODOW FROM created_date)::INT          AS weekday_num,
+    EXTRACT(ISODOW FROM CASE WHEN p_kun = 'date_delivery' THEN date_delivery ELSE created_date::date END)::INT
+                                                    AS weekday_num,
     COUNT(*)::BIGINT                                 AS order_count,
     COALESCE(SUM(fact_price), 0)                    AS total_sum,
     ROUND(COALESCE(AVG(fact_price), 0)::numeric, 2) AS avg_check,
-    COUNT(DISTINCT created_date::date)::BIGINT       AS day_count
+    COUNT(DISTINCT CASE WHEN p_kun = 'date_delivery' THEN date_delivery ELSE created_date::date END)::BIGINT
+                                                    AS day_count
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::DATE BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND (p_statuses IS NULL OR status = ANY(p_statuses))
 GROUP BY weekday_num
 ORDER BY weekday_num;
@@ -436,7 +477,8 @@ $$;
 -- ─── Market Type Breakdown (via raw JSONB) ───────────────────────────────────
 CREATE FUNCTION fn_market_type_stats(
     p_from DATE, p_to DATE,
-    p_statuses TEXT[] DEFAULT NULL
+    p_statuses TEXT[] DEFAULT NULL,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
 )
 RETURNS TABLE (
     market_type TEXT,
@@ -447,7 +489,8 @@ RETURNS TABLE (
 WITH base AS (
     SELECT COALESCE(NULLIF(raw->'market'->'market_type'->>'name', ''), 'Noma''lum') AS mtype, fact_price
     FROM orders_cache
-    WHERE status != '4' AND created_date::DATE BETWEEN p_from AND p_to
+    WHERE status != '4' AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
       AND (p_statuses IS NULL OR status = ANY(p_statuses))
 ),
 agg AS (
@@ -474,7 +517,8 @@ CREATE FUNCTION fn_delivery_extended(
     p_borders       TEXT[] DEFAULT NULL,
     p_payment_types TEXT[] DEFAULT NULL,
     p_statuses      TEXT[] DEFAULT NULL,
-    p_limit         INT    DEFAULT 30
+    p_limit         INT    DEFAULT 30,
+    p_kun TEXT DEFAULT 'created_date'   -- 'created_date' | 'date_delivery'
 )
 RETURNS TABLE (
     delivery_man_id   INT,
@@ -497,7 +541,8 @@ SELECT
     RANK() OVER (ORDER BY COUNT(*) DESC)                  AS rank
 FROM orders_cache
 WHERE status != '4'
-  AND created_date::date BETWEEN p_from AND p_to
+  AND CASE WHEN p_kun = 'date_delivery' THEN date_delivery
+           ELSE created_date::date END BETWEEN p_from AND p_to
   AND delivery_man_id IS NOT NULL
   AND delivery_man_name IS NOT NULL AND delivery_man_name != ''
   AND (p_user_ids      IS NULL OR user_id       = ANY(p_user_ids))
