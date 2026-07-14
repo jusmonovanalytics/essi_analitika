@@ -14,6 +14,7 @@ import { BarChart3, Database, TrendingUp } from 'lucide-react'
 import ScreenAnalytics from './pages/ScreenAnalytics'
 import Malumotlar from './pages/Malumotlar'
 import Prognoz from './pages/Prognoz'
+import { ParolModal } from './components/prognoz/ParolModal'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -77,6 +78,9 @@ export default function App() {
           {page === 'data' && <Malumotlar onBack={() => setPage('analytics')} />}
         </main>
       </div>
+
+      {/* Bazani o'zgartiradigan amal parol so'raganda o'zi ochiladi. */}
+      <ParolModal />
     </QueryClientProvider>
   )
 }

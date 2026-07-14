@@ -8,12 +8,24 @@ import json
 import os
 from datetime import date, timedelta
 
-from fastapi import Body, File, HTTPException, Query, UploadFile
+from fastapi import Body, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from . import db
+from .auth import admin
 from .loader import BadFile, load_fakt, load_yakuniy, read_workbook
 from .router import router, _run
+
+
+# Bazani o'zgartiradigan har bir endpoint shu qo'riqchidan o'tadi.
+# O'qish (ko'rish, filtrlash, Excel yuklab olish) parolsiz qoladi.
+ADMIN = [Depends(admin)]
+
+
+@router.post("/parol")
+async def parol_tekshir(_: None = Depends(admin)):
+    """Parolni tekshirish — interfeys uni saqlashdan oldin chaqiradi."""
+    return {"ok": True}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -168,7 +180,7 @@ async def arxiv_eksport(run_id: int):
     )
 
 
-@router.post("/arxiv/{run_id}/faollashtir")
+@router.post("/arxiv/{run_id}/faollashtir", dependencies=ADMIN)
 async def faollashtir(run_id: int):
     """Arxivdagi eski rejaga qaytish. Joriy reja arxivda qoladi."""
     try:
@@ -178,7 +190,7 @@ async def faollashtir(run_id: int):
     return {"ok": True, "message": msg}
 
 
-@router.post("/hisobla")
+@router.post("/hisobla", dependencies=ADMIN)
 async def hisobla(
     gorizont: int = Query(12, ge=6, le=30),
     ustama: bool = Query(True),
@@ -214,7 +226,7 @@ async def hisobla(
     }
 
 
-@router.post("/tahrir")
+@router.post("/tahrir", dependencies=ADMIN)
 async def tahrir(payload: dict = Body(...)):
     """Rejani QO'LDA tahrirlash.
 
@@ -336,7 +348,7 @@ async def fayllar(manba: str = Query("fakt", pattern="^(fakt|yakuniy)$")):
     }
 
 
-@router.post("/yukla")
+@router.post("/yukla", dependencies=ADMIN)
 async def yukla(
     files: list[UploadFile] = File(...),
     manba: str = Query("fakt", pattern="^(fakt|yakuniy)$"),
@@ -409,7 +421,7 @@ async def yukla(
     }
 
 
-@router.delete("/fayllar")
+@router.delete("/fayllar", dependencies=ADMIN)
 async def ochir_hammasi(
     manba: str = Query(..., pattern="^(fakt|yakuniy)$"),
     tasdiq: str = Query(..., description="'HAMMASINI OCHIRISH' deb yozilishi shart"),
@@ -434,7 +446,7 @@ async def ochir_hammasi(
     }
 
 
-@router.delete("/fayllar/{manba}/{key:path}")
+@router.delete("/fayllar/{manba}/{key:path}", dependencies=ADMIN)
 async def ochir_bitta(manba: str, key: str):
     """fakt — key = sana (2026-07-11); yakuniy — key = fayl nomi."""
     if manba not in ("fakt", "yakuniy"):

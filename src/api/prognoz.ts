@@ -7,7 +7,10 @@
  *   1. Excel yuklanishi prognozni O'ZGARTIRMAYDI — faqat "eskirgan" deb belgilaydi
  *   2. Qayta hisoblash faqat QO'LDA — hisobla()
  *   3. Arxiv o'zgarmas — har hisob va tahrir yangi versiya yaratadi
+ *   4. Bazani o'zgartiradigan har bir amal admin parolini talab qiladi
  */
+import { parolOl } from './admin'
+
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
 const P = `${BASE}/api/prognoz`
 
@@ -21,17 +24,32 @@ async function get<T>(path: string, params: Record<string, string | number | boo
   return res.json()
 }
 
+/**
+ * Bazani o'zgartiradigan so'rov — admin paroli bilan.
+ *
+ * Parol yo'q bo'lsa oyna ochiladi. Server 401 qaytarsa (saqlangan parol
+ * noto'g'ri), bir marta qaytadan so'raladi va so'rov takrorlanadi.
+ */
 async function send<T>(path: string, method: 'POST' | 'DELETE', body?: unknown,
                        params: Record<string, string | number | boolean | null | undefined> = {}): Promise<T> {
   const q = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {
     if (v != null && v !== '') q.set(k, String(v))
   }
-  const res = await fetch(`${P}${path}${q.toString() ? '?' + q : ''}`, {
+  const url = `${P}${path}${q.toString() ? '?' + q : ''}`
+
+  const urin = async (parol: string) => fetch(url, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: {
+      'X-Admin-Parol': parol,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   })
+
+  let res = await urin(await parolOl())
+  if (res.status === 401) res = await urin(await parolOl(true))
+
   const json = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(json.detail ?? `${res.status}`)
   return json as T
@@ -204,10 +222,19 @@ export type YuklashNatija = {
 }
 
 export async function yukla(files: File[], manba: 'fakt' | 'yakuniy', replace: boolean) {
-  const fd = new FormData()
-  files.forEach(f => fd.append('files', f, f.name))
-  const res = await fetch(`${P}/yukla?manba=${manba}&replace=${replace}`,
-                          { method: 'POST', body: fd })
+  const url = `${P}/yukla?manba=${manba}&replace=${replace}`
+
+  // FormData yuboriladi, shuning uchun send() dan alohida — lekin parol
+  // mantig'i bir xil: yo'q bo'lsa so'raladi, 401 bo'lsa qayta so'raladi.
+  const urin = async (parol: string) => {
+    const fd = new FormData()
+    files.forEach(f => fd.append('files', f, f.name))
+    return fetch(url, { method: 'POST', body: fd, headers: { 'X-Admin-Parol': parol } })
+  }
+
+  let res = await urin(await parolOl())
+  if (res.status === 401) res = await urin(await parolOl(true))
+
   const json = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(json.detail ?? `${res.status}`)
   return json as YuklashNatija
