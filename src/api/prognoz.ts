@@ -207,6 +207,12 @@ export type KesimTafsilot = {
   }
   summary?: KesimMetric
 }
+export type DrillDimension = 'otdel' | 'shop_type' | 'zone' | 'agent' | 'orderer' |
+  'courier' | 'shop' | 'pay_type' | 'product_type' | 'product' | 'order_no'
+export type KesimErkin = {
+  sana: string; group_by: DrillDimension; filters: Partial<Record<DrillDimension, string>>
+  items: Array<KesimMetric & { value: string; buyurtmalar: number; mahsulotlar: number }>
+}
 
 // ─── So'rovlar ────────────────────────────────────────────────────────────────
 
@@ -236,6 +242,9 @@ export const fetchKesimTahlili = (oy?: string) =>
   get<KesimTahlili>('/kesim-tahlili', { oy })
 export const fetchKesimTafsilot = (sana: string, otdel?: string, orderNo?: number) =>
   get<KesimTafsilot>('/kesim-tahlili/tafsilot', { sana, otdel, order_no: orderNo })
+export const fetchKesimErkin = (sana: string, groupBy: DrillDimension,
+                                filters: Partial<Record<DrillDimension, string>>) =>
+  get<KesimErkin>('/kesim-tahlili/erkin', { sana, group_by: groupBy, filters: JSON.stringify(filters) })
 
 /** QAYTA HISOBLASH — yagona nuqta. Eski reja arxivda qoladi.
  *

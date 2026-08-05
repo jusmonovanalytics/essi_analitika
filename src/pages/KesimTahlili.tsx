@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { CalendarDays, ChevronLeft, ChevronRight, FileText, Loader2, Package, Scissors, Store, TrendingUp } from 'lucide-react'
 
-import { fetchKesimTafsilot, fetchKesimTahlili, type KesimMetric } from '../api/prognoz'
+import { fetchKesimErkin, fetchKesimTafsilot, fetchKesimTahlili, type DrillDimension, type KesimMetric } from '../api/prognoz'
 
 type Tab = 'kunlar' | 'tovarlar' | 'otdellar'
+type DrillState = { sana: string; path: { dimension: DrillDimension; value: string }[]; groupBy: DrillDimension }
 
 const money = (v: number) => new Intl.NumberFormat('uz-UZ', {
   maximumFractionDigits: 0,
@@ -13,7 +14,7 @@ const money = (v: number) => new Intl.NumberFormat('uz-UZ', {
 export default function KesimTahlili() {
   const [oy, setOy] = useState<string>()
   const [tab, setTab] = useState<Tab>('kunlar')
-  const [drill, setDrill] = useState<{ sana: string; otdel?: string; orderNo?: number } | null>(null)
+  const [drill, setDrill] = useState<DrillState | null>(null)
   const { data, isLoading, error } = useQuery({
     queryKey: ['kesim-tahlili', oy], queryFn: () => fetchKesimTahlili(oy),
   })
@@ -74,7 +75,7 @@ export default function KesimTahlili() {
                   const metric: KesimMetric = row
                   const label = 'sana' in row ? row.sana : 'tovar' in row ? row.tovar : row.otdel
                   const clickable = 'sana' in row
-                  return <tr key={`${label}-${index}`} onClick={() => clickable && setDrill({ sana: row.sana })}
+                  return <tr key={`${label}-${index}`} onClick={() => clickable && setDrill({ sana: row.sana, path: [], groupBy: 'otdel' })}
                     className={`border-t border-slate-800/70 hover:bg-slate-800/30 ${clickable ? 'cursor-pointer' : ''}`}>
                     <td className="px-3 py-2 text-slate-300">
                       <span className="flex items-center gap-1.5">{label}{clickable && <ChevronRight size={12} className="text-blue-400" />}</span>
@@ -95,62 +96,73 @@ export default function KesimTahlili() {
   )
 }
 
-function DrillView({ drill, setDrill }: {
-  drill: { sana: string; otdel?: string; orderNo?: number }
-  setDrill: (value: { sana: string; otdel?: string; orderNo?: number } | null) => void
-}) {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['kesim-tafsilot', drill.sana, drill.otdel, drill.orderNo],
-    queryFn: () => fetchKesimTafsilot(drill.sana, drill.otdel, drill.orderNo),
-  })
-  const title = drill.orderNo ? `Buyurtma №${drill.orderNo}` : drill.otdel ? drill.otdel : drill.sana
-  const firstTitle = drill.orderNo ? 'Mahsulot' : drill.otdel ? 'Buyurtma №' : 'Otdel'
+const DIMENSIONS: { key: DrillDimension; label: string }[] = [
+  { key: 'otdel', label: 'Otdel' }, { key: 'shop_type', label: 'Do‘kon turi' },
+  { key: 'zone', label: 'Zona' }, { key: 'agent', label: 'Agent' },
+  { key: 'orderer', label: 'Buyurtma oluvchi' }, { key: 'courier', label: 'Yetkazuvchi' },
+  { key: 'shop', label: 'Do‘kon' }, { key: 'pay_type', label: 'To‘lov turi' },
+  { key: 'product_type', label: 'Mahsulot turi' }, { key: 'product', label: 'Mahsulot' },
+  { key: 'order_no', label: 'Buyurtma raqami' },
+]
 
-  const back = () => {
-    if (drill.orderNo) setDrill({ sana: drill.sana, otdel: drill.otdel })
-    else if (drill.otdel) setDrill({ sana: drill.sana })
-    else setDrill(null)
+function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: DrillState | null) => void }) {
+  const filters = Object.fromEntries(drill.path.map(x => [x.dimension, x.value])) as Partial<Record<DrillDimension, string>>
+  const order = drill.path.find(x => x.dimension === 'order_no')
+  const otdel = drill.path.find(x => x.dimension === 'otdel')?.value
+  const free = useQuery({ queryKey: ['kesim-erkin', drill.sana, drill.groupBy, filters],
+    queryFn: () => fetchKesimErkin(drill.sana, drill.groupBy, filters), enabled: !order })
+  const detail = useQuery({ queryKey: ['kesim-order', drill.sana, otdel, order?.value],
+    queryFn: () => fetchKesimTafsilot(drill.sana, otdel, Number(order!.value)), enabled: !!order })
+  const used = new Set(drill.path.map(x => x.dimension))
+  const available = DIMENSIONS.filter(x => !used.has(x.key))
+  const currentLabel = DIMENSIONS.find(x => x.key === drill.groupBy)?.label
+  const data = order ? detail.data : free.data
+  const loading = order ? detail.isLoading : free.isLoading
+  const error = order ? detail.error : free.error
+
+  const goBack = () => {
+    if (!drill.path.length) return setDrill(null)
+    const path = drill.path.slice(0, -1)
+    const removed = drill.path.at(-1)!.dimension
+    setDrill({ ...drill, path, groupBy: removed })
+  }
+  const choose = (value: string) => {
+    const path = [...drill.path, { dimension: drill.groupBy, value }]
+    if (drill.groupBy === 'order_no') return setDrill({ ...drill, path })
+    const next = DIMENSIONS.find(x => !path.some(p => p.dimension === x.key))?.key
+    if (next) setDrill({ ...drill, path, groupBy: next })
   }
 
   return <div>
-    <div className="flex items-center gap-2 mb-3 text-xs">
-      <button onClick={back} className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-slate-400 hover:text-white bg-slate-900 border border-slate-800">
-        <ChevronLeft size={13} /> Orqaga
-      </button>
+    <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
+      <button onClick={goBack} className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-slate-400 bg-slate-900 border border-slate-800"><ChevronLeft size={13}/>Orqaga</button>
       <button onClick={() => setDrill(null)} className="text-slate-500 hover:text-blue-300">Kunlar</button>
-      <ChevronRight size={11} className="text-slate-700" />
-      <button onClick={() => setDrill({ sana: drill.sana })} className="text-slate-400 hover:text-blue-300">{drill.sana}</button>
-      {drill.otdel && <><ChevronRight size={11} className="text-slate-700" /><button onClick={() => setDrill({ sana: drill.sana, otdel: drill.otdel })} className="text-slate-400 hover:text-blue-300">{drill.otdel}</button></>}
-      {drill.orderNo && <><ChevronRight size={11} className="text-slate-700" /><span className="text-blue-300">№{drill.orderNo}</span></>}
-      <span className="ml-auto text-slate-500">{title}</span>
+      <ChevronRight size={11}/><span className="text-slate-300">{drill.sana}</span>
+      {drill.path.map((p, i) => <span key={p.dimension} className="contents"><ChevronRight size={11}/><button
+        onClick={() => setDrill({ ...drill, path: drill.path.slice(0, i), groupBy: p.dimension })}
+        className="text-blue-300 hover:text-blue-200">{DIMENSIONS.find(x => x.key === p.dimension)?.label}: {p.value}</button></span>)}
+      {!order && <label className="ml-auto flex items-center gap-2 text-slate-500">Keyingi kesim
+        <select value={drill.groupBy} onChange={e => setDrill({ ...drill, groupBy: e.target.value as DrillDimension })}
+          className="rounded-lg px-3 py-1.5 text-slate-200 bg-slate-900 border border-slate-700">
+          {available.map(x => <option key={x.key} value={x.key}>{x.label}</option>)}
+        </select></label>}
     </div>
-
-    {isLoading && <div className="flex items-center justify-center gap-2 py-16 text-slate-500"><Loader2 size={17} className="animate-spin" /> Tafsilot yuklanmoqda…</div>}
-    {error && <div className="rounded-lg border border-red-900 bg-red-950/30 p-4 text-sm text-red-300">{error.message}</div>}
-    {data?.info && <OrderInfo info={data.info} />}
-    {data && <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950/40">
-      <table className="w-full text-xs">
-        <thead className="bg-slate-900 text-slate-500"><tr>
-          <th className="text-left px-3 py-2.5">{firstTitle}</th>
-          {!drill.orderNo && drill.otdel && <th className="text-left px-3 py-2.5">Do‘kon / agent</th>}
-          <th className="text-right px-3 py-2.5">Fakt summa</th><th className="text-right px-3 py-2.5">Yakuniy summa</th>
-          <th className="text-right px-3 py-2.5 text-rose-400">Kesilgan</th><th className="text-right px-3 py-2.5 text-emerald-400">Qo‘shilgan</th>
-          <th className="text-right px-3 py-2.5">Fakt miqdor</th><th className="text-right px-3 py-2.5">Yakuniy miqdor</th>
-        </tr></thead>
-        <tbody>{data.items.map((row, i) => {
-          const label = drill.orderNo ? row.product : drill.otdel ? `№${row.order_no}` : row.otdel
-          const clickable = !drill.orderNo
-          return <tr key={`${label}-${i}`} onClick={() => {
-            if (!drill.otdel && row.otdel) setDrill({ sana: drill.sana, otdel: row.otdel })
-            else if (drill.otdel && row.order_no) setDrill({ sana: drill.sana, otdel: drill.otdel, orderNo: row.order_no })
-          }} className={`border-t border-slate-800/70 hover:bg-slate-800/30 ${clickable ? 'cursor-pointer' : ''}`}>
-            <td className="px-3 py-2 text-slate-200"><span className="flex items-center gap-1.5">{drill.orderNo ? <Package size={12} className="text-slate-500" /> : <FileText size={12} className="text-blue-400" />}{label}{clickable && <ChevronRight size={11} className="text-blue-400" />}</span></td>
-            {!drill.orderNo && drill.otdel && <td className="px-3 py-2 text-slate-500"><div>{row.shop_name || '—'}</div><div className="text-[10px]">{row.agent || ''}</div></td>}
-            <Num value={row.fakt_summa} /><Num value={row.yak_summa} /><Num value={row.kesilgan_summa} color="text-rose-300" /><Num value={row.qoshilgan_summa} color="text-emerald-300" /><Num value={row.fakt_qty} /><Num value={row.yak_qty} />
-          </tr>
-        })}</tbody>
-      </table>
-    </div>}
+    {loading && <div className="flex justify-center gap-2 py-16 text-slate-500"><Loader2 className="animate-spin" size={17}/>Yuklanmoqda…</div>}
+    {error && <div className="p-4 text-red-300">{error.message}</div>}
+    {order && detail.data?.info && <OrderInfo info={detail.data.info}/>}
+    {data && <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950/40"><table className="w-full text-xs">
+      <thead className="bg-slate-900 text-slate-500"><tr><th className="text-left px-3 py-2.5">{order ? 'Mahsulot' : currentLabel}</th>
+        <th className="text-right px-3 py-2.5">Buyurtmalar</th><th className="text-right px-3 py-2.5">Mahsulotlar</th>
+        <th className="text-right px-3 py-2.5">Fakt summa</th><th className="text-right px-3 py-2.5">Yakuniy summa</th>
+        <th className="text-right px-3 py-2.5 text-rose-400">Kesilgan</th><th className="text-right px-3 py-2.5 text-emerald-400">Qo‘shilgan</th></tr></thead>
+      <tbody>{data.items.map((row, i) => {
+        const value = order ? ('product' in row ? row.product || '' : '') : ('value' in row ? row.value : '')
+        return <tr key={`${value}-${i}`} onClick={() => !order && choose(value)} className={`border-t border-slate-800/70 hover:bg-slate-800/30 ${!order ? 'cursor-pointer' : ''}`}>
+          <td className="px-3 py-2 text-slate-200"><span className="flex items-center gap-1.5"><FileText size={12} className="text-blue-400"/>{value}{!order&&<ChevronRight size={11}/>}</span></td>
+          <td className="px-3 py-2 text-right text-slate-500">{'buyurtmalar' in row ? row.buyurtmalar : '—'}</td>
+          <td className="px-3 py-2 text-right text-slate-500">{'mahsulotlar' in row ? row.mahsulotlar : '—'}</td>
+          <Num value={row.fakt_summa}/><Num value={row.yak_summa}/><Num value={row.kesilgan_summa} color="text-rose-300"/><Num value={row.qoshilgan_summa} color="text-emerald-300"/>
+        </tr>})}</tbody></table></div>}
   </div>
 }
 
