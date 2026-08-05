@@ -181,6 +181,19 @@ export type Mahsulot = {
 
 export type Tahrir = { product_id: number; target_date: string; qty: number }
 
+export type KesimMetric = {
+  fakt_summa: number; yak_summa: number
+  kesilgan_summa: number; qoshilgan_summa: number
+  fakt_qty: number; yak_qty: number
+  kesilgan_qty: number; qoshilgan_qty: number
+}
+export type KesimTahlili = {
+  oy: string | null; oylar: string[]; summary: KesimMetric
+  kunlar: (KesimMetric & { sana: string })[]
+  tovarlar: (KesimMetric & { tovar: string })[]
+  otdellar: (KesimMetric & { otdel: string })[]
+}
+
 // ─── So'rovlar ────────────────────────────────────────────────────────────────
 
 export const fetchSummary = () => get<Summary>('/summary')
@@ -205,6 +218,8 @@ export const fetchHolat = () => get<Holat>('/holat')
 export const fetchFayllar = (manba: 'fakt' | 'yakuniy') => get<Fayllar>('/fayllar', { manba })
 export const fetchChiqarilgan = () => get<Chiqarilgan[]>('/chiqarilgan')
 export const fetchMahsulot = (pid: number) => get<Mahsulot>(`/product/${pid}`)
+export const fetchKesimTahlili = (oy?: string) =>
+  get<KesimTahlili>('/kesim-tahlili', { oy })
 
 /** QAYTA HISOBLASH — yagona nuqta. Eski reja arxivda qoladi.
  *

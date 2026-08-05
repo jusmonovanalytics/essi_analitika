@@ -6,6 +6,8 @@ import asyncio
 import io
 import json
 import os
+import re
+from collections import defaultdict
 from datetime import date, timedelta
 
 from fastapi import Body, Depends, File, HTTPException, Query, UploadFile
@@ -301,6 +303,105 @@ async def holat():
             "gacha": y["d1"].isoformat() if y["d1"] else None,
         },
         "olchov": dict(d),
+    }
+
+
+OTDEL_VALUES = """
+    ('Диллеры','Диллеры'), ('Магазин','Розница'), ('VIP','Розница'),
+    ('OSDO','Розница'), ('A - маркет','Розница'), ('B - маркет','Розница'),
+    ('С - маркет','Розница'), ('Розница','Розница'), ('Халк ретейл','Сеть'),
+    ('Корзинка','Сеть'), ('Сеть','Сеть'), ('Сырная лавка','Сеть'),
+    ('Макро','Сеть'), ('Урбант ретейл','Сеть'), ('Би-1','Сеть'),
+    ('Магнум ретейл','Сеть'), ('Ассорти','Сеть'), ('Хавас','Хавас'),
+    ('Бюджетная орг.','Хорика'), ('Школа / Садик','Хорика'),
+    ('Гостиница','Хорика'), ('Кафе / Ресторан','Хорика'),
+    ('Амирал Ритейл','Сеть'), ('Доставщики','Хорика'),
+    ('Наманган','Диллеры'), ('Самарканд','Диллеры'), ('Бухоро','Диллеры')
+"""
+
+
+@router.get("/kesim-tahlili")
+async def kesim_tahlili(oy: str = Query(None, description="YYYY-MM")):
+    """Fakt va yakuniy savdo summasining kesilgan/qo'shilgan farqi."""
+    if oy is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", oy):
+        raise HTTPException(422, "oy YYYY-MM formatida bo'lishi kerak")
+
+    months = await db.q("""
+        SELECT to_char(date_trunc('month', sale_date), 'YYYY-MM') AS oy
+        FROM (SELECT sale_date FROM fakt_savdo INTERSECT
+              SELECT sale_date FROM yakuniy_savdo) x
+        GROUP BY 1 ORDER BY 1 DESC
+    """)
+    available = [r["oy"] for r in months]
+    selected = oy or (available[0] if available else None)
+    if not selected:
+        return {"oy": None, "oylar": [], "summary": {}, "kunlar": [],
+                "tovarlar": [], "otdellar": []}
+
+    start = selected + "-01"
+    rows = await db.q(f"""
+        WITH xarita(shop_type, otdel) AS (VALUES {OTDEL_VALUES}),
+        f AS (
+            SELECT sale_date, order_no, product, COALESCE(x.otdel, 'Boshqa') AS otdel,
+                   sum(qty)::numeric AS qty, sum(amount)::numeric AS amount
+            FROM fakt_savdo s LEFT JOIN xarita x ON btrim(s.shop_type) = x.shop_type
+            WHERE s.sale_date >= %s::date AND s.sale_date < (%s::date + interval '1 month')
+            GROUP BY 1,2,3,4
+        ), y AS (
+            SELECT sale_date, order_no, product, COALESCE(x.otdel, 'Boshqa') AS otdel,
+                   sum(qty)::numeric AS qty, sum(amount)::numeric AS amount
+            FROM yakuniy_savdo s LEFT JOIN xarita x ON btrim(s.shop_type) = x.shop_type
+            WHERE s.sale_date >= %s::date AND s.sale_date < (%s::date + interval '1 month')
+            GROUP BY 1,2,3,4
+        )
+        SELECT COALESCE(f.sale_date,y.sale_date) AS sana,
+               COALESCE(f.order_no,y.order_no) AS order_no,
+               COALESCE(f.product,y.product) AS product,
+               COALESCE(f.otdel,y.otdel) AS otdel,
+               COALESCE(f.qty,0) AS fakt_qty, COALESCE(y.qty,0) AS yak_qty,
+               COALESCE(f.amount,0) AS fakt_summa, COALESCE(y.amount,0) AS yak_summa
+        FROM f FULL JOIN y ON f.sale_date = y.sale_date
+          AND f.order_no IS NOT DISTINCT FROM y.order_no
+          AND f.product = y.product AND f.otdel = y.otdel
+        ORDER BY 1,2,3,4
+    """, (start, start, start, start))
+
+    def empty():
+        return {"fakt_summa": 0.0, "yak_summa": 0.0, "kesilgan_summa": 0.0,
+                "qoshilgan_summa": 0.0, "fakt_qty": 0.0, "yak_qty": 0.0,
+                "kesilgan_qty": 0.0, "qoshilgan_qty": 0.0}
+
+    summary = empty()
+    kunlar, tovarlar, otdellar = defaultdict(empty), defaultdict(empty), defaultdict(empty)
+
+    def add(dst, row):
+        fq, yq = float(row["fakt_qty"]), float(row["yak_qty"])
+        fs, ys = float(row["fakt_summa"]), float(row["yak_summa"])
+        dst["fakt_summa"] += fs; dst["yak_summa"] += ys
+        dst["kesilgan_summa"] += max(fs - ys, 0)
+        dst["qoshilgan_summa"] += max(ys - fs, 0)
+        dst["fakt_qty"] += fq; dst["yak_qty"] += yq
+        dst["kesilgan_qty"] += max(fq - yq, 0)
+        dst["qoshilgan_qty"] += max(yq - fq, 0)
+
+    for row in rows:
+        add(summary, row)
+        add(kunlar[row["sana"].isoformat()], row)
+        add(tovarlar[row["product"]], row)
+        add(otdellar[row["otdel"]], row)
+
+    def packed(data, key):
+        return [{key: name, **{k: round(v, 2) for k, v in values.items()}}
+                for name, values in data.items()]
+
+    return {
+        "oy": selected, "oylar": available,
+        "summary": {k: round(v, 2) for k, v in summary.items()},
+        "kunlar": sorted(packed(kunlar, "sana"), key=lambda x: x["sana"]),
+        "tovarlar": sorted(packed(tovarlar, "tovar"),
+                           key=lambda x: x["kesilgan_summa"], reverse=True),
+        "otdellar": sorted(packed(otdellar, "otdel"),
+                           key=lambda x: x["kesilgan_summa"], reverse=True),
     }
 
 
