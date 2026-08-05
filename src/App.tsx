@@ -20,12 +20,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import {
   BarChart3, Database, LogIn, LogOut, PanelLeftClose, PanelLeftOpen,
-  ShieldCheck, TrendingUp,
+  Scissors, ShieldCheck, TrendingUp,
 } from 'lucide-react'
 
 import ScreenAnalytics from './pages/ScreenAnalytics'
 import Malumotlar from './pages/Malumotlar'
 import Prognoz from './pages/Prognoz'
+import KesimTahlili from './pages/KesimTahlili'
 import { ParolModal } from './components/prognoz/ParolModal'
 import { adminmi, parolniUnut, parolOl, ParolBekor } from './api/admin'
 
@@ -35,7 +36,7 @@ const queryClient = new QueryClient({
   },
 })
 
-type Page = 'analytics' | 'prognoz' | 'data'
+type Page = 'analytics' | 'prognoz' | 'kesim' | 'data'
 
 const NAV: {
   key: Page; label: string; izoh: string
@@ -43,6 +44,7 @@ const NAV: {
 }[] = [
   { key: 'analytics', label: 'Savdo analitikasi', izoh: 'RITM — jonli buyurtmalar', icon: BarChart3,  faqatAdmin: false },
   { key: 'prognoz',   label: 'Savdo prognozi',    izoh: '2 haftalik reja',          icon: TrendingUp, faqatAdmin: true  },
+  { key: 'kesim',     label: 'Kesim tahlili',     izoh: 'Kesilgan va qo‘shilgan',    icon: Scissors,   faqatAdmin: true  },
   { key: 'data',      label: "Ma'lumotlar",       izoh: 'Excel yuklash · arxiv',    icon: Database,   faqatAdmin: true  },
 ]
 
@@ -219,6 +221,7 @@ export default function App() {
             <ScreenAnalytics onGoToData={admin ? () => setPage('data') : undefined} />
           )}
           {page === 'prognoz' && admin && <Prognoz />}
+          {page === 'kesim' && admin && <KesimTahlili />}
           {page === 'data' && admin && <Malumotlar onBack={() => setPage('analytics')} />}
         </main>
       </div>
