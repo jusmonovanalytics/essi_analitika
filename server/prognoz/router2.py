@@ -406,7 +406,7 @@ async def kesim_tahlili(oy: str = Query(None, description="YYYY-MM")):
 
 
 DRILL_DIMENSIONS = {
-    "otdel": "otdel", "shop_type": "shop_type", "zone": "zone",
+    "sana": "sale_date::text", "otdel": "otdel", "shop_type": "shop_type", "zone": "zone",
     "agent": "agent", "orderer": "orderer", "courier": "courier",
     "shop": "shop", "pay_type": "pay_type", "product_type": "product_type",
     "product": "product", "order_no": "order_no::text",
@@ -414,13 +414,13 @@ DRILL_DIMENSIONS = {
 
 
 @router.get("/kesim-tahlili/erkin")
-async def kesim_erkin(sana: str = Query(...), group_by: str = Query(...),
+async def kesim_erkin(oy: str = Query(...), group_by: str = Query(...),
                       filters: str = Query("{}")):
     """11 parametrdan istalgan tartibda erkin drill-down."""
     try:
-        date.fromisoformat(sana)
+        start = date.fromisoformat(oy + "-01")
     except ValueError:
-        raise HTTPException(422, "sana YYYY-MM-DD formatida bo'lishi kerak")
+        raise HTTPException(422, "oy YYYY-MM formatida bo'lishi kerak")
     if group_by not in DRILL_DIMENSIONS:
         raise HTTPException(422, "group_by qo'llab-quvvatlanmaydi")
     try:
@@ -430,7 +430,7 @@ async def kesim_erkin(sana: str = Query(...), group_by: str = Query(...),
     if not isinstance(selected, dict) or any(k not in DRILL_DIMENSIONS for k in selected):
         raise HTTPException(422, "filters ichida noma'lum parametr bor")
 
-    where, params = [], [sana, sana]
+    where, params = [], [start, start, start, start]
     for key, value in selected.items():
         where.append(f"COALESCE(({DRILL_DIMENSIONS[key]})::text, 'Noma''lum') = %s")
         params.append(str(value))
@@ -447,7 +447,7 @@ async def kesim_erkin(sana: str = Query(...), group_by: str = Query(...),
                    max(pay_type) pay_type, max(product_type) product_type,
                    sum(qty)::numeric qty, sum(amount)::numeric amount
             FROM fakt_savdo s LEFT JOIN xarita x ON btrim(s.shop_type)=x.shop_type
-            WHERE sale_date=%s::date GROUP BY 1,2,3,4
+            WHERE sale_date >= %s::date AND sale_date < (%s::date + interval '1 month') GROUP BY 1,2,3,4
         ), y AS (
             SELECT sale_date, order_no, product, COALESCE(x.otdel,'Boshqa') otdel,
                    max(s.shop_type) shop_type, max(zone) zone, max(agent) agent,
@@ -456,9 +456,10 @@ async def kesim_erkin(sana: str = Query(...), group_by: str = Query(...),
                    max(pay_type) pay_type, max(product_type) product_type,
                    sum(qty)::numeric qty, sum(amount)::numeric amount
             FROM yakuniy_savdo s LEFT JOIN xarita x ON btrim(s.shop_type)=x.shop_type
-            WHERE sale_date=%s::date GROUP BY 1,2,3,4
+            WHERE sale_date >= %s::date AND sale_date < (%s::date + interval '1 month') GROUP BY 1,2,3,4
         ), d AS (
-            SELECT COALESCE(f.order_no,y.order_no) order_no,
+            SELECT COALESCE(f.sale_date,y.sale_date) sale_date,
+                   COALESCE(f.order_no,y.order_no) order_no,
                    COALESCE(f.product,y.product) product,
                    COALESCE(f.otdel,y.otdel) otdel,
                    COALESCE(f.shop_type,y.shop_type) shop_type,
@@ -487,23 +488,27 @@ async def kesim_erkin(sana: str = Query(...), group_by: str = Query(...),
                count(DISTINCT product) mahsulotlar
         FROM d {where_sql} GROUP BY 1 ORDER BY kesilgan_summa DESC, value
     """, params)
-    return {"sana": sana, "group_by": group_by, "filters": selected,
+    return {"oy": oy, "group_by": group_by, "filters": selected,
             "items": [{k: (round(float(v), 2) if k not in
                        ("value", "buyurtmalar", "mahsulotlar") else v)
                        for k, v in row.items()} for row in rows]}
 
 
 @router.get("/kesim-tahlili/tafsilot")
-async def kesim_tafsilot(sana: str = Query(...), otdel: str = Query(None),
+async def kesim_tafsilot(oy: str = Query(...), sana: str = Query(None), otdel: str = Query(None),
                          order_no: int = Query(None)):
     """Kun -> otdel -> buyurtma -> mahsulot drill-down ma'lumotlari."""
     try:
-        date.fromisoformat(sana)
+        start = date.fromisoformat(oy + "-01")
+        if sana:
+            date.fromisoformat(sana)
     except ValueError:
-        raise HTTPException(422, "sana YYYY-MM-DD formatida bo'lishi kerak")
+        raise HTTPException(422, "oy yoki sana formati noto'g'ri")
+    date_filter = "s.sale_date = %s::date" if sana else \
+                  "s.sale_date >= %s::date AND s.sale_date < (%s::date + interval '1 month')"
     otdel_filter = "AND COALESCE(x.otdel, 'Boshqa') = %s" if otdel else ""
     order_filter = "AND s.order_no = %s" if order_no is not None else ""
-    params_f = [sana] + ([otdel] if otdel else []) + ([order_no] if order_no is not None else [])
+    params_f = ([sana] if sana else [start, start]) + ([otdel] if otdel else []) + ([order_no] if order_no is not None else [])
     params = params_f + params_f
     rows = await db.q(f"""
         WITH xarita(shop_type, otdel) AS (VALUES {OTDEL_VALUES}),
@@ -516,7 +521,7 @@ async def kesim_tafsilot(sana: str = Query(...), otdel: str = Query(None),
                    max(discount_pct) discount_pct,
                    sum(qty)::numeric qty, sum(amount)::numeric amount
             FROM fakt_savdo s LEFT JOIN xarita x ON btrim(s.shop_type) = x.shop_type
-            WHERE s.sale_date = %s::date {otdel_filter} {order_filter}
+            WHERE {date_filter} {otdel_filter} {order_filter}
             GROUP BY 1,2,3,4
         ), y AS (
             SELECT sale_date, order_no, product, COALESCE(x.otdel, 'Boshqa') AS otdel,
@@ -527,7 +532,7 @@ async def kesim_tafsilot(sana: str = Query(...), otdel: str = Query(None),
                    max(discount_pct) discount_pct,
                    sum(qty)::numeric qty, sum(amount)::numeric amount
             FROM yakuniy_savdo s LEFT JOIN xarita x ON btrim(s.shop_type) = x.shop_type
-            WHERE s.sale_date = %s::date {otdel_filter} {order_filter}
+            WHERE {date_filter} {otdel_filter} {order_filter}
             GROUP BY 1,2,3,4
         )
         SELECT COALESCE(f.order_no,y.order_no) order_no,

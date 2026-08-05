@@ -4,7 +4,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, FileText, Loader2, Scissors, T
 
 import { fetchKesimErkin, fetchKesimTafsilot, fetchKesimTahlili, type DrillDimension, type KesimMetric } from '../api/prognoz'
 
-type DrillState = { sana: string; path: { dimension: DrillDimension; value: string }[]; groupBy: DrillDimension }
+type DrillState = { oy: string; path: { dimension: DrillDimension; value: string }[]; groupBy: DrillDimension }
 
 const money = (v: number) => new Intl.NumberFormat('uz-UZ', {
   maximumFractionDigits: 0,
@@ -29,7 +29,7 @@ export default function KesimTahlili() {
         <div className="flex-1" />
         <label className="flex items-center gap-2 text-xs text-slate-400">
           <CalendarDays size={14} /> Oy
-          <select value={oy ?? data?.oy ?? ''} onChange={e => setOy(e.target.value)}
+          <select value={oy ?? data?.oy ?? ''} onChange={e => { setOy(e.target.value); setDrill(null) }}
             className="rounded-lg px-3 py-1.5 text-slate-200 bg-slate-900 border border-slate-700">
             {(data?.oylar ?? []).map(x => <option key={x} value={x}>{x}</option>)}
           </select>
@@ -49,6 +49,14 @@ export default function KesimTahlili() {
           </div>
 
           {drill ? <DrillView drill={drill} setDrill={setDrill} /> : <>
+            <div className="flex items-center justify-end gap-2 mb-3 text-xs text-slate-500">
+              Birinchi kesim
+              <select defaultValue="" onChange={e => e.target.value && setDrill({ oy: data.oy!, path: [], groupBy: e.target.value as DrillDimension })}
+                className="rounded-lg px-3 py-1.5 text-slate-200 bg-slate-900 border border-slate-700">
+                <option value="" disabled>Parametrni tanlang</option>
+                {DIMENSIONS.map(x => <option key={x.key} value={x.key}>{x.label}</option>)}
+              </select>
+            </div>
             <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950/40">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-slate-900 text-slate-500">
@@ -67,7 +75,7 @@ export default function KesimTahlili() {
                   const metric: KesimMetric = row
                   const label = row.sana
                   const clickable = 'sana' in row
-                  return <tr key={`${label}-${index}`} onClick={() => clickable && setDrill({ sana: row.sana, path: [], groupBy: 'otdel' })}
+                  return <tr key={`${label}-${index}`} onClick={() => clickable && setDrill({ oy: data.oy!, path: [{ dimension: 'sana', value: row.sana }], groupBy: 'otdel' })}
                     className={`border-t border-slate-800/70 hover:bg-slate-800/30 ${clickable ? 'cursor-pointer' : ''}`}>
                     <td className="px-3 py-2 text-slate-300">
                       <span className="flex items-center gap-1.5">{label}{clickable && <ChevronRight size={12} className="text-blue-400" />}</span>
@@ -89,6 +97,7 @@ export default function KesimTahlili() {
 }
 
 const DIMENSIONS: { key: DrillDimension; label: string }[] = [
+  { key: 'sana', label: 'Sana' },
   { key: 'otdel', label: 'Otdel' }, { key: 'shop_type', label: 'Do‘kon turi' },
   { key: 'zone', label: 'Zona' }, { key: 'agent', label: 'Agent' },
   { key: 'orderer', label: 'Buyurtma oluvchi' }, { key: 'courier', label: 'Yetkazuvchi' },
@@ -101,10 +110,11 @@ function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: Drill
   const filters = Object.fromEntries(drill.path.map(x => [x.dimension, x.value])) as Partial<Record<DrillDimension, string>>
   const order = drill.path.find(x => x.dimension === 'order_no')
   const otdel = drill.path.find(x => x.dimension === 'otdel')?.value
-  const free = useQuery({ queryKey: ['kesim-erkin', drill.sana, drill.groupBy, filters],
-    queryFn: () => fetchKesimErkin(drill.sana, drill.groupBy, filters), enabled: !order })
-  const detail = useQuery({ queryKey: ['kesim-order', drill.sana, otdel, order?.value],
-    queryFn: () => fetchKesimTafsilot(drill.sana, otdel, Number(order!.value)), enabled: !!order })
+  const sana = drill.path.find(x => x.dimension === 'sana')?.value
+  const free = useQuery({ queryKey: ['kesim-erkin', drill.oy, drill.groupBy, filters],
+    queryFn: () => fetchKesimErkin(drill.oy, drill.groupBy, filters), enabled: !order })
+  const detail = useQuery({ queryKey: ['kesim-order', drill.oy, sana, otdel, order?.value],
+    queryFn: () => fetchKesimTafsilot(drill.oy, sana, otdel, Number(order!.value)), enabled: !!order })
   const used = new Set(drill.path.map(x => x.dimension))
   const available = DIMENSIONS.filter(x => !used.has(x.key))
   const currentLabel = DIMENSIONS.find(x => x.key === drill.groupBy)?.label
@@ -129,7 +139,7 @@ function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: Drill
     <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
       <button onClick={goBack} className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-slate-400 bg-slate-900 border border-slate-800"><ChevronLeft size={13}/>Orqaga</button>
       <button onClick={() => setDrill(null)} className="text-slate-500 hover:text-blue-300">Kunlar</button>
-      <ChevronRight size={11}/><span className="text-slate-300">{drill.sana}</span>
+      <ChevronRight size={11}/><span className="text-slate-300">{drill.oy}</span>
       {drill.path.map((p, i) => <span key={p.dimension} className="contents"><ChevronRight size={11}/><button
         onClick={() => setDrill({ ...drill, path: drill.path.slice(0, i), groupBy: p.dimension })}
         className="text-blue-300 hover:text-blue-200">{DIMENSIONS.find(x => x.key === p.dimension)?.label}: {p.value}</button></span>)}
