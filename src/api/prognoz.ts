@@ -193,6 +193,20 @@ export type KesimTahlili = {
   tovarlar: (KesimMetric & { tovar: string })[]
   otdellar: (KesimMetric & { otdel: string })[]
 }
+export type KesimTafsilot = {
+  level: 'otdellar' | 'buyurtmalar' | 'buyurtma'
+  sana: string; otdel?: string
+  items: Array<KesimMetric & {
+    otdel?: string; order_no?: number; product?: string; product_type?: string
+    shop_name?: string; agent?: string
+  }>
+  info?: {
+    order_no: number; otdel: string; agent?: string; orderer?: string
+    courier?: string; zone?: string; shop_type?: string; shop_name?: string
+    shop_no?: number; pay_type?: string; discount_pct?: number
+  }
+  summary?: KesimMetric
+}
 
 // ─── So'rovlar ────────────────────────────────────────────────────────────────
 
@@ -220,6 +234,8 @@ export const fetchChiqarilgan = () => get<Chiqarilgan[]>('/chiqarilgan')
 export const fetchMahsulot = (pid: number) => get<Mahsulot>(`/product/${pid}`)
 export const fetchKesimTahlili = (oy?: string) =>
   get<KesimTahlili>('/kesim-tahlili', { oy })
+export const fetchKesimTafsilot = (sana: string, otdel?: string, orderNo?: number) =>
+  get<KesimTafsilot>('/kesim-tahlili/tafsilot', { sana, otdel, order_no: orderNo })
 
 /** QAYTA HISOBLASH — yagona nuqta. Eski reja arxivda qoladi.
  *

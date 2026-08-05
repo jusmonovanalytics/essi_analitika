@@ -405,6 +405,112 @@ async def kesim_tahlili(oy: str = Query(None, description="YYYY-MM")):
     }
 
 
+@router.get("/kesim-tahlili/tafsilot")
+async def kesim_tafsilot(sana: str = Query(...), otdel: str = Query(None),
+                         order_no: int = Query(None)):
+    """Kun -> otdel -> buyurtma -> mahsulot drill-down ma'lumotlari."""
+    try:
+        date.fromisoformat(sana)
+    except ValueError:
+        raise HTTPException(422, "sana YYYY-MM-DD formatida bo'lishi kerak")
+    if order_no is not None and not otdel:
+        raise HTTPException(422, "order_no bilan otdel ham berilishi kerak")
+
+    otdel_filter = "AND COALESCE(x.otdel, 'Boshqa') = %s" if otdel else ""
+    order_filter = "AND s.order_no = %s" if order_no is not None else ""
+    params_f = [sana] + ([otdel] if otdel else []) + ([order_no] if order_no is not None else [])
+    params = params_f + params_f
+    rows = await db.q(f"""
+        WITH xarita(shop_type, otdel) AS (VALUES {OTDEL_VALUES}),
+        f AS (
+            SELECT sale_date, order_no, product, COALESCE(x.otdel, 'Boshqa') AS otdel,
+                   max(product_type) product_type, max(agent) agent,
+                   max(orderer) orderer, max(courier) courier, max(zone) zone,
+                   max(s.shop_type) shop_type, max(shop_name) shop_name,
+                   max(shop_no) shop_no, max(pay_type) pay_type,
+                   max(discount_pct) discount_pct,
+                   sum(qty)::numeric qty, sum(amount)::numeric amount
+            FROM fakt_savdo s LEFT JOIN xarita x ON btrim(s.shop_type) = x.shop_type
+            WHERE s.sale_date = %s::date {otdel_filter} {order_filter}
+            GROUP BY 1,2,3,4
+        ), y AS (
+            SELECT sale_date, order_no, product, COALESCE(x.otdel, 'Boshqa') AS otdel,
+                   max(product_type) product_type, max(agent) agent,
+                   max(orderer) orderer, max(courier) courier, max(zone) zone,
+                   max(s.shop_type) shop_type, max(shop_name) shop_name,
+                   max(shop_no) shop_no, max(pay_type) pay_type,
+                   max(discount_pct) discount_pct,
+                   sum(qty)::numeric qty, sum(amount)::numeric amount
+            FROM yakuniy_savdo s LEFT JOIN xarita x ON btrim(s.shop_type) = x.shop_type
+            WHERE s.sale_date = %s::date {otdel_filter} {order_filter}
+            GROUP BY 1,2,3,4
+        )
+        SELECT COALESCE(f.order_no,y.order_no) order_no,
+               COALESCE(f.product,y.product) product,
+               COALESCE(f.otdel,y.otdel) otdel,
+               COALESCE(f.product_type,y.product_type) product_type,
+               COALESCE(f.agent,y.agent) agent, COALESCE(f.orderer,y.orderer) orderer,
+               COALESCE(f.courier,y.courier) courier, COALESCE(f.zone,y.zone) zone,
+               COALESCE(f.shop_type,y.shop_type) shop_type,
+               COALESCE(f.shop_name,y.shop_name) shop_name,
+               COALESCE(f.shop_no,y.shop_no) shop_no,
+               COALESCE(f.pay_type,y.pay_type) pay_type,
+               COALESCE(f.discount_pct,y.discount_pct) discount_pct,
+               COALESCE(f.qty,0) fakt_qty, COALESCE(y.qty,0) yak_qty,
+               COALESCE(f.amount,0) fakt_summa, COALESCE(y.amount,0) yak_summa
+        FROM f FULL JOIN y ON f.sale_date = y.sale_date
+          AND f.order_no IS NOT DISTINCT FROM y.order_no
+          AND f.product = y.product AND f.otdel = y.otdel
+        ORDER BY 1,2
+    """, params)
+
+    def metric():
+        return {"fakt_summa": 0.0, "yak_summa": 0.0, "kesilgan_summa": 0.0,
+                "qoshilgan_summa": 0.0, "fakt_qty": 0.0, "yak_qty": 0.0,
+                "kesilgan_qty": 0.0, "qoshilgan_qty": 0.0}
+
+    def add(dst, row):
+        fs, ys = float(row["fakt_summa"]), float(row["yak_summa"])
+        fq, yq = float(row["fakt_qty"]), float(row["yak_qty"])
+        dst["fakt_summa"] += fs; dst["yak_summa"] += ys
+        dst["kesilgan_summa"] += max(fs - ys, 0)
+        dst["qoshilgan_summa"] += max(ys - fs, 0)
+        dst["fakt_qty"] += fq; dst["yak_qty"] += yq
+        dst["kesilgan_qty"] += max(fq - yq, 0)
+        dst["qoshilgan_qty"] += max(yq - fq, 0)
+
+    if order_no is not None:
+        total = metric()
+        for row in rows:
+            add(total, row)
+        info = ({k: rows[0][k] for k in
+                 ("order_no", "otdel", "agent", "orderer", "courier", "zone",
+                  "shop_type", "shop_name", "shop_no", "pay_type", "discount_pct")}
+                if rows else {"order_no": order_no, "otdel": otdel})
+        items = []
+        for row in rows:
+            m = metric(); add(m, row)
+            items.append({"product": row["product"], "product_type": row["product_type"],
+                          **{k: round(v, 2) for k, v in m.items()}})
+        return {"level": "buyurtma", "sana": sana, "info": info,
+                "summary": {k: round(v, 2) for k, v in total.items()}, "items": items}
+
+    key = "order_no" if otdel else "otdel"
+    grouped = {}
+    meta = {}
+    for row in rows:
+        value = row[key]
+        if value not in grouped:
+            grouped[value] = metric()
+            meta[value] = {"shop_name": row["shop_name"], "agent": row["agent"]}
+        add(grouped[value], row)
+    items = [{key: value, **meta[value], **{k: round(v, 2) for k, v in values.items()}}
+             for value, values in grouped.items()]
+    items.sort(key=lambda x: x["kesilgan_summa"], reverse=True)
+    return {"level": "buyurtmalar" if otdel else "otdellar", "sana": sana,
+            "otdel": otdel, "items": items}
+
+
 @router.get("/fayllar")
 async def fayllar(manba: str = Query("fakt", pattern="^(fakt|yakuniy)$")):
     """Yuklangan ma'lumot: fakt — kun bo'yicha, yakuniy — fayl bo'yicha."""
