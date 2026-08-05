@@ -405,6 +405,94 @@ async def kesim_tahlili(oy: str = Query(None, description="YYYY-MM")):
     }
 
 
+DRILL_DIMENSIONS = {
+    "otdel": "otdel", "shop_type": "shop_type", "zone": "zone",
+    "agent": "agent", "orderer": "orderer", "courier": "courier",
+    "shop": "shop", "pay_type": "pay_type", "product_type": "product_type",
+    "product": "product", "order_no": "order_no::text",
+}
+
+
+@router.get("/kesim-tahlili/erkin")
+async def kesim_erkin(sana: str = Query(...), group_by: str = Query(...),
+                      filters: str = Query("{}")):
+    """11 parametrdan istalgan tartibda erkin drill-down."""
+    try:
+        date.fromisoformat(sana)
+    except ValueError:
+        raise HTTPException(422, "sana YYYY-MM-DD formatida bo'lishi kerak")
+    if group_by not in DRILL_DIMENSIONS:
+        raise HTTPException(422, "group_by qo'llab-quvvatlanmaydi")
+    try:
+        selected = json.loads(filters)
+    except json.JSONDecodeError:
+        raise HTTPException(422, "filters JSON obyekt bo'lishi kerak")
+    if not isinstance(selected, dict) or any(k not in DRILL_DIMENSIONS for k in selected):
+        raise HTTPException(422, "filters ichida noma'lum parametr bor")
+
+    where, params = [], [sana, sana]
+    for key, value in selected.items():
+        where.append(f"COALESCE(({DRILL_DIMENSIONS[key]})::text, 'Noma''lum') = %s")
+        params.append(str(value))
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    group_expr = DRILL_DIMENSIONS[group_by]
+
+    rows = await db.q(f"""
+        WITH xarita(shop_type, otdel) AS (VALUES {OTDEL_VALUES}),
+        f AS (
+            SELECT sale_date, order_no, product, COALESCE(x.otdel,'Boshqa') otdel,
+                   max(s.shop_type) shop_type, max(zone) zone, max(agent) agent,
+                   max(orderer) orderer, max(courier) courier,
+                   max(shop_name) shop_name, max(shop_no) shop_no,
+                   max(pay_type) pay_type, max(product_type) product_type,
+                   sum(qty)::numeric qty, sum(amount)::numeric amount
+            FROM fakt_savdo s LEFT JOIN xarita x ON btrim(s.shop_type)=x.shop_type
+            WHERE sale_date=%s::date GROUP BY 1,2,3,4
+        ), y AS (
+            SELECT sale_date, order_no, product, COALESCE(x.otdel,'Boshqa') otdel,
+                   max(s.shop_type) shop_type, max(zone) zone, max(agent) agent,
+                   max(orderer) orderer, max(courier) courier,
+                   max(shop_name) shop_name, max(shop_no) shop_no,
+                   max(pay_type) pay_type, max(product_type) product_type,
+                   sum(qty)::numeric qty, sum(amount)::numeric amount
+            FROM yakuniy_savdo s LEFT JOIN xarita x ON btrim(s.shop_type)=x.shop_type
+            WHERE sale_date=%s::date GROUP BY 1,2,3,4
+        ), d AS (
+            SELECT COALESCE(f.order_no,y.order_no) order_no,
+                   COALESCE(f.product,y.product) product,
+                   COALESCE(f.otdel,y.otdel) otdel,
+                   COALESCE(f.shop_type,y.shop_type) shop_type,
+                   COALESCE(f.zone,y.zone) zone, COALESCE(f.agent,y.agent) agent,
+                   COALESCE(f.orderer,y.orderer) orderer,
+                   COALESCE(f.courier,y.courier) courier,
+                   COALESCE(f.pay_type,y.pay_type) pay_type,
+                   COALESCE(f.product_type,y.product_type) product_type,
+                   COALESCE(f.shop_no::text || ' — ' || f.shop_name,
+                            y.shop_no::text || ' — ' || y.shop_name,
+                            f.shop_name,y.shop_name,'Noma''lum') shop,
+                   COALESCE(f.qty,0) fakt_qty, COALESCE(y.qty,0) yak_qty,
+                   COALESCE(f.amount,0) fakt_summa, COALESCE(y.amount,0) yak_summa
+            FROM f FULL JOIN y ON f.sale_date=y.sale_date
+              AND f.order_no IS NOT DISTINCT FROM y.order_no
+              AND f.product=y.product AND f.otdel=y.otdel
+        )
+        SELECT COALESCE(({group_expr})::text,'Noma''lum') value,
+               sum(fakt_summa) fakt_summa, sum(yak_summa) yak_summa,
+               sum(GREATEST(fakt_summa-yak_summa,0)) kesilgan_summa,
+               sum(GREATEST(yak_summa-fakt_summa,0)) qoshilgan_summa,
+               sum(fakt_qty) fakt_qty, sum(yak_qty) yak_qty,
+               sum(GREATEST(fakt_qty-yak_qty,0)) kesilgan_qty,
+               sum(GREATEST(yak_qty-fakt_qty,0)) qoshilgan_qty,
+               count(DISTINCT order_no) buyurtmalar,
+               count(DISTINCT product) mahsulotlar
+        FROM d {where_sql} GROUP BY 1 ORDER BY kesilgan_summa DESC, value
+    """, params)
+    return {"sana": sana, "group_by": group_by, "filters": selected,
+            "items": [{k: (round(float(v), 2) if k not in
+                       ("value", "buyurtmalar", "mahsulotlar") else v)
+                       for k, v in row.items()} for row in rows]}
+
+
 @router.get("/kesim-tahlili/tafsilot")
 async def kesim_tafsilot(sana: str = Query(...), otdel: str = Query(None),
                          order_no: int = Query(None)):
@@ -413,9 +501,6 @@ async def kesim_tafsilot(sana: str = Query(...), otdel: str = Query(None),
         date.fromisoformat(sana)
     except ValueError:
         raise HTTPException(422, "sana YYYY-MM-DD formatida bo'lishi kerak")
-    if order_no is not None and not otdel:
-        raise HTTPException(422, "order_no bilan otdel ham berilishi kerak")
-
     otdel_filter = "AND COALESCE(x.otdel, 'Boshqa') = %s" if otdel else ""
     order_filter = "AND s.order_no = %s" if order_no is not None else ""
     params_f = [sana] + ([otdel] if otdel else []) + ([order_no] if order_no is not None else [])
