@@ -494,6 +494,55 @@ async def kesim_erkin(oy: str = Query(...), group_by: str = Query(...),
                        for k, v in row.items()} for row in rows]}
 
 
+def _kesim_oy_excel(oy: str, fakt: list[dict], yakuniy: list[dict]):
+    import csv
+    import zipfile
+    ustunlar = ["sale_date", "order_no", "agent", "orderer", "courier", "zone",
+                "shop_type", "shop_name", "shop_no", "product_type", "product",
+                "pay_type", "discount_pct", "qty", "amount", "source_file"]
+    nomlar = ["Sana", "Buyurtma raqami", "Agent", "Buyurtma oluvchi", "Yetkazuvchi",
+              "Zona", "Do'kon turi", "Do'kon", "Do'kon raqami", "Mahsulot turi",
+              "Mahsulot", "To'lov turi", "Chegirma %", "Miqdor", "Summa", "Manba fayl"]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=4) as z:
+        for title, rows in (("Fakt savdo.csv", fakt), ("Yakuniy savdo.csv", yakuniy)):
+            with z.open(title, "w") as raw:
+                text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="", write_through=True)
+                writer = csv.writer(text, delimiter=";")
+                writer.writerow(nomlar)
+                for row in rows:
+                    writer.writerow([row.get(k) for k in ustunlar])
+                text.flush(); text.detach()
+        summary = io.StringIO()
+        w = csv.writer(summary, delimiter=";"); w.writerow(["Ko'rsatkich", "Qiymat"])
+        w.writerow(["Oy", oy]); w.writerow(["Fakt qatorlar", len(fakt)])
+        w.writerow(["Yakuniy qatorlar", len(yakuniy)])
+        w.writerow(["Fakt summa", sum(float(r.get("amount") or 0) for r in fakt)])
+        w.writerow(["Yakuniy summa", sum(float(r.get("amount") or 0) for r in yakuniy)])
+        z.writestr("Xulosa.csv", "\ufeff" + summary.getvalue())
+    return buf.getvalue()
+
+
+@router.get("/kesim-tahlili/eksport")
+async def kesim_oy_eksport(oy: str = Query(...)):
+    try:
+        start = date.fromisoformat(oy + "-01")
+    except ValueError:
+        raise HTTPException(422, "oy YYYY-MM formatida bo'lishi kerak")
+    cols = """sale_date, order_no, agent, orderer, courier, zone, shop_type,
+              shop_name, shop_no, product_type, product, pay_type, discount_pct,
+              qty, amount, source_file"""
+    sql = f"""SELECT {cols} FROM {{table}} WHERE sale_date >= %s
+              AND sale_date < (%s::date + interval '1 month')
+              ORDER BY sale_date, order_no, product"""
+    fakt = await db.q(sql.format(table="fakt_savdo"), (start, start))
+    yak = await db.q(sql.format(table="yakuniy_savdo"), (start, start))
+    data = await asyncio.to_thread(_kesim_oy_excel, oy, fakt, yak)
+    return StreamingResponse(io.BytesIO(data),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="kesim-{oy}-toliq.zip"'})
+
+
 @router.get("/kesim-tahlili/tafsilot")
 async def kesim_tafsilot(oy: str = Query(...), sana: str = Query(None), otdel: str = Query(None),
                          order_no: int = Query(None)):

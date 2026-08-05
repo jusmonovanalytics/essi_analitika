@@ -245,6 +245,8 @@ export const fetchKesimTafsilot = (oy: string, sana?: string, otdel?: string, or
 export const fetchKesimErkin = (oy: string, groupBy: DrillDimension,
                                 filters: Partial<Record<DrillDimension, string>>) =>
   get<KesimErkin>('/kesim-tahlili/erkin', { oy, group_by: groupBy, filters: JSON.stringify(filters) })
+export const kesimOyEksport = (oy: string) =>
+  eksport(`/kesim-tahlili/eksport?oy=${encodeURIComponent(oy)}`, `kesim-${oy}-toliq.zip`)
 
 /** QAYTA HISOBLASH — yagona nuqta. Eski reja arxivda qoladi.
  *
