@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarDays, ChevronLeft, ChevronRight, FileText, Loader2, Scissors, TrendingUp } from 'lucide-react'
+import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, FileText, Loader2, Search, Scissors, TrendingUp, X } from 'lucide-react'
 
 import { fetchKesimErkin, fetchKesimTafsilot, fetchKesimTahlili, type DrillDimension, type KesimMetric } from '../api/prognoz'
 
 type DrillState = { oy: string; path: { dimension: DrillDimension; value: string }[]; groupBy: DrillDimension }
+type SortKey = 'label' | 'buyurtmalar' | 'mahsulotlar' | keyof KesimMetric
 
 const money = (v: number) => new Intl.NumberFormat('uz-UZ', {
   maximumFractionDigits: 0,
@@ -114,6 +115,9 @@ const DIMENSIONS: { key: DrillDimension; label: string }[] = [
 ]
 
 function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: DrillState | null) => void }) {
+  const [search, setSearch] = useState('')
+  const [minimums, setMinimums] = useState<Partial<Record<SortKey, string>>>({})
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'kesilgan_summa', dir: 'desc' })
   const filters = Object.fromEntries(drill.path.map(x => [x.dimension, x.value])) as Partial<Record<DrillDimension, string>>
   const order = drill.path.find(x => x.dimension === 'order_no')
   const otdel = drill.path.find(x => x.dimension === 'otdel')?.value
@@ -128,7 +132,27 @@ function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: Drill
   const data = order ? detail.data : free.data
   const loading = order ? detail.isLoading : free.isLoading
   const error = order ? detail.error : free.error
-  const totals = sumRows(data?.items ?? [])
+  const visibleRows = useMemo(() => {
+    const items = [...(data?.items ?? [])]
+    const label = (row: typeof items[number]) => order
+      ? ('product' in row ? row.product || '' : '') : ('value' in row ? row.value : '')
+    const filtered = items.filter(row => {
+      if (search && !label(row).toLocaleLowerCase().includes(search.toLocaleLowerCase())) return false
+      return Object.entries(minimums).every(([key, value]) => !value || key === 'label' ||
+        Number(row[key as keyof typeof row] ?? 0) >= Number(value))
+    })
+    filtered.sort((a, b) => {
+      const av = sort.key === 'label' ? label(a) : Number(a[sort.key as keyof typeof a] ?? 0)
+      const bv = sort.key === 'label' ? label(b) : Number(b[sort.key as keyof typeof b] ?? 0)
+      const cmp = typeof av === 'string' ? av.localeCompare(String(bv)) : av - Number(bv)
+      return sort.dir === 'asc' ? cmp : -cmp
+    })
+    return filtered
+  }, [data, minimums, order, search, sort])
+  const totals = sumRows(visibleRows)
+  const setMin = (key: SortKey, value: string) => setMinimums(x => ({ ...x, [key]: value }))
+  const toggleSort = (key: SortKey) => setSort(x => ({ key, dir: x.key === key && x.dir === 'asc' ? 'desc' : 'asc' }))
+  const resetTable = () => { setSearch(''); setMinimums({}); setSort({ key: 'kesilgan_summa', dir: 'desc' }) }
 
   const goBack = () => {
     if (!drill.path.length) return setDrill(null)
@@ -160,12 +184,24 @@ function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: Drill
     {loading && <div className="flex justify-center gap-2 py-16 text-slate-500"><Loader2 className="animate-spin" size={17}/>Yuklanmoqda…</div>}
     {error && <div className="p-4 text-red-300">{error.message}</div>}
     {order && detail.data?.info && <OrderInfo info={detail.data.info}/>}
+    {data && <div className="flex items-center gap-2 mb-2">
+      <label className="relative"><Search size={13} className="absolute left-2.5 top-2 text-slate-600"/>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Jadvaldan qidirish…"
+          className="w-64 rounded-lg pl-8 pr-3 py-1.5 text-xs bg-slate-900 border border-slate-700 outline-none focus:border-blue-600"/></label>
+      <span className="text-[10px] text-slate-600">{visibleRows.length} / {data.items.length} qator</span>
+      {(search || Object.values(minimums).some(Boolean)) && <button onClick={resetTable} className="flex items-center gap-1 px-2 py-1.5 rounded text-xs text-slate-400 hover:text-white"><X size={12}/>Filtrlarni tozalash</button>}
+    </div>}
     {data && <div className="rounded-xl overflow-auto border border-slate-800 bg-slate-950/40" style={{ maxHeight: 'calc(100vh - 285px)' }}><table className="w-full text-xs">
-      <thead className="sticky top-0 z-10 bg-slate-900 text-slate-500"><tr><th className="text-left px-3 py-2.5">{order ? 'Mahsulot' : currentLabel}</th>
-        <th className="text-right px-3 py-2.5">Buyurtmalar</th><th className="text-right px-3 py-2.5">Mahsulotlar</th>
-        <th className="text-right px-3 py-2.5">Fakt summa</th><th className="text-right px-3 py-2.5">Yakuniy summa</th>
-        <th className="text-right px-3 py-2.5 text-rose-400">Kesilgan</th><th className="text-right px-3 py-2.5 text-emerald-400">Qo‘shilgan</th></tr></thead>
-      <tbody>{data.items.map((row, i) => {
+      <thead className="sticky top-0 z-10 bg-slate-900 text-slate-500"><tr>
+        <SortHead label={order ? 'Mahsulot' : currentLabel || ''} column="label" sort={sort} onSort={toggleSort}/>
+        <SortHead label="Buyurtmalar" column="buyurtmalar" sort={sort} onSort={toggleSort}/><SortHead label="Mahsulotlar" column="mahsulotlar" sort={sort} onSort={toggleSort}/>
+        <SortHead label="Fakt summa" column="fakt_summa" sort={sort} onSort={toggleSort}/><SortHead label="Yakuniy summa" column="yak_summa" sort={sort} onSort={toggleSort}/>
+        <SortHead label="Kesilgan" column="kesilgan_summa" sort={sort} onSort={toggleSort} color="text-rose-400"/><SortHead label="Qo‘shilgan" column="qoshilgan_summa" sort={sort} onSort={toggleSort} color="text-emerald-400"/>
+      </tr><tr className="border-t border-slate-800 bg-slate-950/95"><th/>
+        {(['buyurtmalar','mahsulotlar','fakt_summa','yak_summa','kesilgan_summa','qoshilgan_summa'] as SortKey[]).map(k => <th key={k} className="px-1 pb-1.5"><input type="number" value={minimums[k] ?? ''} onChange={e => setMin(k,e.target.value)} placeholder="Min"
+          className="w-full min-w-16 rounded px-1.5 py-1 text-right text-[10px] bg-slate-900 border border-slate-800 outline-none focus:border-blue-700"/></th>)}
+      </tr></thead>
+      <tbody>{visibleRows.map((row, i) => {
         const value = order ? ('product' in row ? row.product || '' : '') : ('value' in row ? row.value : '')
         return <tr key={`${value}-${i}`} onClick={() => !order && choose(value)} className={`border-t border-slate-800/70 hover:bg-slate-800/30 ${!order ? 'cursor-pointer' : ''}`}>
           <td className="px-3 py-2 text-slate-200"><span className="flex items-center gap-1.5"><FileText size={12} className="text-blue-400"/>{value}{!order&&<ChevronRight size={11}/>}</span></td>
@@ -201,6 +237,16 @@ function Card({ title, value, color, icon }: { title: string; value: number; col
     <div className="flex items-center gap-1.5 text-[11px] text-slate-500">{icon}{title}</div>
     <div className="font-mono text-xl font-semibold mt-1" style={{ color }}>{money(value)} <span className="text-[10px] text-slate-600">so‘m</span></div>
   </div>
+}
+
+function SortHead({ label, column, sort, onSort, color = '' }: {
+  label: string; column: SortKey; sort: { key: SortKey; dir: 'asc' | 'desc' }
+  onSort: (key: SortKey) => void; color?: string
+}) {
+  return <th onClick={() => onSort(column)} className={`px-3 py-2.5 cursor-pointer select-none ${column === 'label' ? 'text-left' : 'text-right'} ${color}`}>
+    <span className={`inline-flex items-center gap-1 ${column === 'label' ? '' : 'justify-end'}`}>{label}
+      {sort.key === column && (sort.dir === 'asc' ? <ArrowUp size={11}/> : <ArrowDown size={11}/>)}</span>
+  </th>
 }
 
 function Num({ value, color = 'text-slate-400' }: { value: number; color?: string }) {
