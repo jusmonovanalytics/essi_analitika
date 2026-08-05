@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarDays, ChevronLeft, ChevronRight, FileText, Loader2, Package, Scissors, Store, TrendingUp } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, FileText, Loader2, Scissors, TrendingUp } from 'lucide-react'
 
 import { fetchKesimErkin, fetchKesimTafsilot, fetchKesimTahlili, type DrillDimension, type KesimMetric } from '../api/prognoz'
 
-type Tab = 'kunlar' | 'tovarlar' | 'otdellar'
 type DrillState = { sana: string; path: { dimension: DrillDimension; value: string }[]; groupBy: DrillDimension }
 
 const money = (v: number) => new Intl.NumberFormat('uz-UZ', {
@@ -13,13 +12,12 @@ const money = (v: number) => new Intl.NumberFormat('uz-UZ', {
 
 export default function KesimTahlili() {
   const [oy, setOy] = useState<string>()
-  const [tab, setTab] = useState<Tab>('kunlar')
   const [drill, setDrill] = useState<DrillState | null>(null)
   const { data, isLoading, error } = useQuery({
     queryKey: ['kesim-tahlili', oy], queryFn: () => fetchKesimTahlili(oy),
   })
 
-  const rows = data?.[tab] ?? []
+  const rows = data?.kunlar ?? []
 
   return (
     <div className="h-full overflow-auto px-5 py-4 text-slate-200">
@@ -51,17 +49,11 @@ export default function KesimTahlili() {
           </div>
 
           {drill ? <DrillView drill={drill} setDrill={setDrill} /> : <>
-            <div className="flex gap-1 mb-3">
-              <TabButton active={tab === 'kunlar'} onClick={() => setTab('kunlar')} icon={<CalendarDays size={13} />} label="Kunlar" />
-              <TabButton active={tab === 'tovarlar'} onClick={() => setTab('tovarlar')} icon={<Package size={13} />} label="Tovarlar" />
-              <TabButton active={tab === 'otdellar'} onClick={() => setTab('otdellar')} icon={<Store size={13} />} label="Otdellar" />
-            </div>
-
             <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950/40">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-slate-900 text-slate-500">
                 <tr>
-                  <th className="text-left px-3 py-2.5">{tab === 'kunlar' ? 'Sana' : tab === 'tovarlar' ? 'Tovar' : 'Otdel'}</th>
+                  <th className="text-left px-3 py-2.5">Sana</th>
                   <th className="text-right px-3 py-2.5">Fakt summa</th>
                   <th className="text-right px-3 py-2.5">Yakuniy summa</th>
                   <th className="text-right px-3 py-2.5 text-rose-400">Kesilgan</th>
@@ -73,7 +65,7 @@ export default function KesimTahlili() {
               <tbody>
                 {rows.map((row, index) => {
                   const metric: KesimMetric = row
-                  const label = 'sana' in row ? row.sana : 'tovar' in row ? row.tovar : row.otdel
+                  const label = row.sana
                   const clickable = 'sana' in row
                   return <tr key={`${label}-${index}`} onClick={() => clickable && setDrill({ sana: row.sana, path: [], groupBy: 'otdel' })}
                     className={`border-t border-slate-800/70 hover:bg-slate-800/30 ${clickable ? 'cursor-pointer' : ''}`}>
@@ -185,11 +177,6 @@ function Card({ title, value, color, icon }: { title: string; value: number; col
     <div className="flex items-center gap-1.5 text-[11px] text-slate-500">{icon}{title}</div>
     <div className="font-mono text-xl font-semibold mt-1" style={{ color }}>{money(value)} <span className="text-[10px] text-slate-600">so‘m</span></div>
   </div>
-}
-
-function TabButton({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-  return <button onClick={onClick} className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
-    style={active ? { background: 'rgba(59,130,246,.14)', color: '#93c5fd' } : { color: '#64748b' }}>{icon}{label}</button>
 }
 
 function Num({ value, color = 'text-slate-400' }: { value: number; color?: string }) {
