@@ -21,7 +21,8 @@ Ruxsat:
 """
 from . import db                    # noqa: F401
 from .auth import admin             # noqa: F401  (main.py ham foydalanadi)
+from .router2 import kesim_router   # noqa: F401
 from .router import router          # noqa: F401
 from . import router2               # noqa: F401  (endpointlarni router'ga qo'shadi)
 
-__all__ = ["router", "db", "admin"]
+__all__ = ["router", "kesim_router", "db", "admin"]

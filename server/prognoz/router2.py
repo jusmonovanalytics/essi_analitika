@@ -10,7 +10,7 @@ import re
 from collections import defaultdict
 from datetime import date, timedelta
 
-from fastapi import Body, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from . import db
@@ -22,6 +22,10 @@ from .router import router, _run
 # Bazani o'zgartiradigan har bir endpoint shu qo'riqchidan o'tadi.
 # O'qish (ko'rish, filtrlash, Excel yuklab olish) parolsiz qoladi.
 ADMIN = [Depends(admin)]
+
+# Kesim tahlili mehmonlar uchun ham ochiq. Prognoz routerida umumiy admin
+# himoyasi borligi sababli shu funksiyalar alohida ochiq prefiksda ham beriladi.
+kesim_router = APIRouter(prefix="/api/kesim-tahlili", tags=["kesim-tahlili"])
 
 
 @router.post("/parol")
@@ -321,6 +325,7 @@ OTDEL_VALUES = """
 
 
 @router.get("/kesim-tahlili")
+@kesim_router.get("")
 async def kesim_tahlili(oy: str = Query(None, description="YYYY-MM")):
     """Fakt va yakuniy savdo summasining kesilgan/qo'shilgan farqi."""
     if oy is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", oy):
@@ -414,6 +419,7 @@ DRILL_DIMENSIONS = {
 
 
 @router.get("/kesim-tahlili/erkin")
+@kesim_router.get("/erkin")
 async def kesim_erkin(oy: str = Query(...), group_by: str = Query(...),
                       filters: str = Query("{}")):
     """11 parametrdan istalgan tartibda erkin drill-down."""
@@ -524,6 +530,7 @@ def _kesim_oy_excel(oy: str, fakt: list[dict], yakuniy: list[dict]):
 
 
 @router.get("/kesim-tahlili/eksport")
+@kesim_router.get("/eksport")
 async def kesim_oy_eksport(oy: str = Query(...)):
     try:
         start = date.fromisoformat(oy + "-01")
@@ -544,6 +551,7 @@ async def kesim_oy_eksport(oy: str = Query(...)):
 
 
 @router.get("/kesim-tahlili/tafsilot")
+@kesim_router.get("/tafsilot")
 async def kesim_tafsilot(oy: str = Query(...), sana: str = Query(None), otdel: str = Query(None),
                          order_no: int = Query(None)):
     """Kun -> otdel -> buyurtma -> mahsulot drill-down ma'lumotlari."""
