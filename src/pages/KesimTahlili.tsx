@@ -18,6 +18,17 @@ export default function KesimTahlili() {
 
   const rows = data?.kunlar ?? []
   const totals = sumRows(rows)
+  const exportInitial = async () => {
+    if (!data?.oy) return
+    const XLSX = await import('xlsx')
+    const exportRows = rows.map(r => ({ Sana: r.sana, 'Fakt summa': r.fakt_summa,
+      'Yakuniy summa': r.yak_summa, Kesilgan: r.kesilgan_summa,
+      "Qo‘shilgan": r.qoshilgan_summa, 'Kesilgan miqdor': r.kesilgan_qty,
+      "Qo‘shilgan miqdor": r.qoshilgan_qty }))
+    const ws = XLSX.utils.json_to_sheet(exportRows); const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Kunlar')
+    XLSX.writeFile(wb, `kesim-${data.oy}-kunlar.xlsx`)
+  }
 
   return (
     <div className="h-full overflow-hidden px-5 py-4 text-slate-200">
@@ -50,7 +61,9 @@ export default function KesimTahlili() {
 
           {drill ? <DrillView drill={drill} setDrill={setDrill} /> : <>
             <div className="flex items-center justify-end gap-2 mb-3 text-xs text-slate-500">
-              Birinchi kesim
+              <button onClick={exportInitial} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-emerald-300 bg-emerald-950/30 border border-emerald-900/50"><Download size={12}/>Joriy holat</button>
+              <button onClick={() => kesimOyEksport(data.oy!)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-blue-300 bg-blue-950/30 border border-blue-900/50"><Download size={12}/>Oyning to‘liq ma’lumoti</button>
+              <span className="ml-2">Birinchi kesim</span>
               <select defaultValue="" onChange={e => e.target.value && setDrill({ oy: data.oy!, path: [], groupBy: e.target.value as DrillDimension })}
                 className="rounded-lg px-3 py-1.5 text-slate-200 bg-slate-900 border border-slate-700">
                 <option value="" disabled>Parametrni tanlang</option>
