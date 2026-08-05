@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Filter, Loader2, Search, Scissors, TrendingUp, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Loader2, Search, Scissors, TrendingUp, X } from 'lucide-react'
 
-import { fetchKesimErkin, fetchKesimTafsilot, fetchKesimTahlili, type DrillDimension, type KesimMetric } from '../api/prognoz'
+import { fetchKesimErkin, fetchKesimTafsilot, fetchKesimTahlili, kesimOyEksport, type DrillDimension, type KesimMetric } from '../api/prognoz'
 
 type DrillState = { oy: string; path: { dimension: DrillDimension; value: string }[]; groupBy: DrillDimension }
 type SortKey = 'label' | 'buyurtmalar' | 'mahsulotlar' | keyof KesimMetric
@@ -114,9 +114,6 @@ const DIMENSIONS: { key: DrillDimension; label: string }[] = [
 
 function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: DrillState | null) => void }) {
   const [search, setSearch] = useState('')
-  const [minimums, setMinimums] = useState<Partial<Record<SortKey, string>>>({})
-  const [maximums, setMaximums] = useState<Partial<Record<SortKey, string>>>({})
-  const [activeFilter, setActiveFilter] = useState<SortKey | null>(null)
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'kesilgan_summa', dir: 'desc' })
   const filters = Object.fromEntries(drill.path.map(x => [x.dimension, x.value])) as Partial<Record<DrillDimension, string>>
   const order = drill.path.find(x => x.dimension === 'order_no')
@@ -138,9 +135,7 @@ function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: Drill
       ? ('product' in row ? row.product || '' : '') : ('value' in row ? row.value : '')
     const filtered = items.filter(row => {
       if (search && !label(row).toLocaleLowerCase().includes(search.toLocaleLowerCase())) return false
-      const aboveMin = Object.entries(minimums).every(([key, value]) => !value || key === 'label' || Number(row[key as keyof typeof row] ?? 0) >= Number(value))
-      const belowMax = Object.entries(maximums).every(([key, value]) => !value || key === 'label' || Number(row[key as keyof typeof row] ?? 0) <= Number(value))
-      return aboveMin && belowMax
+      return true
     })
     filtered.sort((a, b) => {
       const av = sort.key === 'label' ? label(a) : Number(a[sort.key as keyof typeof a] ?? 0)
@@ -149,13 +144,10 @@ function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: Drill
       return sort.dir === 'asc' ? cmp : -cmp
     })
     return filtered
-  }, [data, maximums, minimums, order, search, sort])
+  }, [data, order, search, sort])
   const totals = sumRows(visibleRows)
-  const setMin = (key: SortKey, value: string) => setMinimums(x => ({ ...x, [key]: value }))
-  const setMax = (key: SortKey, value: string) => setMaximums(x => ({ ...x, [key]: value }))
   const toggleSort = (key: SortKey) => setSort(x => ({ key, dir: x.key === key && x.dir === 'asc' ? 'desc' : 'asc' }))
-  const resetTable = () => { setSearch(''); setMinimums({}); setMaximums({}); setSort({ key: 'kesilgan_summa', dir: 'desc' }) }
-  const filterKey: SortKey = activeFilter ?? 'kesilgan_summa'
+  const resetTable = () => { setSearch(''); setSort({ key: 'kesilgan_summa', dir: 'desc' }) }
   const exportRows = async () => {
     const XLSX = await import('xlsx')
     const rows = visibleRows.map(row => ({
@@ -203,21 +195,11 @@ function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: Drill
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Jadvaldan qidirish…"
           className="w-64 rounded-lg pl-8 pr-3 py-1.5 text-xs bg-slate-900 border border-slate-700 outline-none focus:border-blue-600"/></label>
       <span className="text-[10px] text-slate-600">{visibleRows.length} / {data.items.length} qator</span>
-      <div className="flex items-center gap-1.5 ml-2 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800">
-        <Filter size={12} className="text-blue-400"/>
-        <select value={filterKey} onChange={e => setActiveFilter(e.target.value as SortKey)} className="bg-transparent text-[11px] text-slate-300 outline-none">
-          <option value="buyurtmalar">Buyurtmalar</option><option value="mahsulotlar">Mahsulotlar</option>
-          <option value="fakt_summa">Fakt summa</option><option value="yak_summa">Yakuniy summa</option>
-          <option value="kesilgan_summa">Kesilgan</option><option value="qoshilgan_summa">Qo‘shilgan</option>
-        </select>
-        <input type="number" value={minimums[filterKey] ?? ''} onChange={e => setMin(filterKey,e.target.value)} placeholder="Dan"
-          className="w-24 rounded px-2 py-1 text-right text-[10px] bg-slate-950 border border-slate-700 outline-none"/>
-        <span className="text-slate-700">—</span>
-        <input type="number" value={maximums[filterKey] ?? ''} onChange={e => setMax(filterKey,e.target.value)} placeholder="Gacha"
-          className="w-24 rounded px-2 py-1 text-right text-[10px] bg-slate-950 border border-slate-700 outline-none"/>
+      {search && <button onClick={resetTable} className="flex items-center gap-1 px-2 py-1.5 rounded text-xs text-slate-400 hover:text-white"><X size={12}/>Qidiruvni tozalash</button>}
+      <div className="ml-auto flex items-center gap-1.5">
+        <button onClick={exportRows} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-emerald-300 bg-emerald-950/30 border border-emerald-900/50"><Download size={12}/>Joriy holat</button>
+        <button onClick={() => kesimOyEksport(drill.oy)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-blue-300 bg-blue-950/30 border border-blue-900/50"><Download size={12}/>Oyning to‘liq ma’lumoti</button>
       </div>
-      {(search || Object.values(minimums).some(Boolean) || Object.values(maximums).some(Boolean)) && <button onClick={resetTable} className="flex items-center gap-1 px-2 py-1.5 rounded text-xs text-slate-400 hover:text-white"><X size={12}/>Filtrlarni tozalash</button>}
-      <button onClick={exportRows} className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-emerald-300 bg-emerald-950/30 border border-emerald-900/50"><Download size={12}/>Excel yuklash</button>
     </div>}
     {data && <div className="rounded-xl overflow-auto border border-slate-800 bg-slate-950/40" style={{ maxHeight: 'calc(100vh - 285px)' }}><table className="w-full text-xs">
       <thead className="sticky top-0 z-10 bg-slate-900 text-slate-500"><tr>
@@ -225,13 +207,6 @@ function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: Drill
         <SortHead label="Buyurtmalar" column="buyurtmalar" sort={sort} onSort={toggleSort}/><SortHead label="Mahsulotlar" column="mahsulotlar" sort={sort} onSort={toggleSort}/>
         <SortHead label="Fakt summa" column="fakt_summa" sort={sort} onSort={toggleSort}/><SortHead label="Yakuniy summa" column="yak_summa" sort={sort} onSort={toggleSort}/>
         <SortHead label="Kesilgan" column="kesilgan_summa" sort={sort} onSort={toggleSort} color="text-rose-400"/><SortHead label="Qo‘shilgan" column="qoshilgan_summa" sort={sort} onSort={toggleSort} color="text-emerald-400"/>
-      </tr><tr className="hidden"><th/>
-        {(['buyurtmalar','mahsulotlar','fakt_summa','yak_summa','kesilgan_summa','qoshilgan_summa'] as SortKey[]).map(k => <th key={k} className="px-1 pb-1.5"><div className="flex gap-1">
-          <input type="number" value={minimums[k] ?? ''} onChange={e => setMin(k,e.target.value)} placeholder="Dan"
-            className="w-1/2 min-w-14 rounded px-1.5 py-1 text-right text-[10px] bg-slate-900 border border-slate-800 outline-none focus:border-blue-700"/>
-          <input type="number" value={maximums[k] ?? ''} onChange={e => setMax(k,e.target.value)} placeholder="Gacha"
-            className="w-1/2 min-w-14 rounded px-1.5 py-1 text-right text-[10px] bg-slate-900 border border-slate-800 outline-none focus:border-blue-700"/>
-        </div></th>)}
       </tr></thead>
       <tbody>{visibleRows.map((row, i) => {
         const value = order ? ('product' in row ? row.product || '' : '') : ('value' in row ? row.value : '')
