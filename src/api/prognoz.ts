@@ -13,6 +13,7 @@ import { adminSarlavha, parolOl } from './admin'
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
 const P = `${BASE}/api/prognoz`
+const KESIM = `${BASE}/api/kesim-tahlili`
 
 /** Prognozning O'QISH so'rovlari ham admin uchun — mehmon bu bo'limni ko'rmaydi.
  *  Bu yerda parol SO'RALMAYDI: bo'limga faqat kirgan admin tushadi, va bir necha
@@ -42,6 +43,24 @@ export async function eksport(path: string, nom: string) {
   a.href = url
   a.download = nom
   a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function kesimGet<T>(path: string, params: Record<string, string | null | undefined> = {}): Promise<T> {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) if (v != null && v !== '') q.set(k, v)
+  const res = await fetch(`${KESIM}${path}${q.toString() ? '?' + q : ''}`)
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? `${res.status}`)
+  return res.json()
+}
+
+async function kesimEksport(oy: string) {
+  const res = await fetch(`${KESIM}/eksport?oy=${encodeURIComponent(oy)}`)
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? `${res.status}`)
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = `kesim-${oy}-toliq.zip`; a.click()
   URL.revokeObjectURL(url)
 }
 
@@ -239,14 +258,14 @@ export const fetchFayllar = (manba: 'fakt' | 'yakuniy') => get<Fayllar>('/faylla
 export const fetchChiqarilgan = () => get<Chiqarilgan[]>('/chiqarilgan')
 export const fetchMahsulot = (pid: number) => get<Mahsulot>(`/product/${pid}`)
 export const fetchKesimTahlili = (oy?: string) =>
-  get<KesimTahlili>('/kesim-tahlili', { oy })
+  kesimGet<KesimTahlili>('', { oy })
 export const fetchKesimTafsilot = (oy: string, sana?: string, otdel?: string, orderNo?: number) =>
-  get<KesimTafsilot>('/kesim-tahlili/tafsilot', { oy, sana, otdel, order_no: orderNo })
+  kesimGet<KesimTafsilot>('/tafsilot', { oy, sana, otdel, order_no: orderNo == null ? undefined : String(orderNo) })
 export const fetchKesimErkin = (oy: string, groupBy: DrillDimension,
                                 filters: Partial<Record<DrillDimension, string>>) =>
-  get<KesimErkin>('/kesim-tahlili/erkin', { oy, group_by: groupBy, filters: JSON.stringify(filters) })
+  kesimGet<KesimErkin>('/erkin', { oy, group_by: groupBy, filters: JSON.stringify(filters) })
 export const kesimOyEksport = (oy: string) =>
-  eksport(`/kesim-tahlili/eksport?oy=${encodeURIComponent(oy)}`, `kesim-${oy}-toliq.zip`)
+  kesimEksport(oy)
 
 /** QAYTA HISOBLASH — yagona nuqta. Eski reja arxivda qoladi.
  *

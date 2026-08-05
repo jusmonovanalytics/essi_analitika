@@ -154,6 +154,7 @@ app.add_middleware(
 # ─── Savdo prognozi (/api/prognoz/*) ──────────────────────────────────────────
 
 app.include_router(prognoz.router)
+app.include_router(prognoz.kesim_router)
 
 
 # ─── Common filter params ─────────────────────────────────────────────────────

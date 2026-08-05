@@ -44,7 +44,7 @@ const NAV: {
 }[] = [
   { key: 'analytics', label: 'Savdo analitikasi', izoh: 'RITM — jonli buyurtmalar', icon: BarChart3,  faqatAdmin: false },
   { key: 'prognoz',   label: 'Savdo prognozi',    izoh: '2 haftalik reja',          icon: TrendingUp, faqatAdmin: true  },
-  { key: 'kesim',     label: 'Kesim tahlili',     izoh: 'Kesilgan va qo‘shilgan',    icon: Scissors,   faqatAdmin: true  },
+  { key: 'kesim',     label: 'Kesim tahlili',     izoh: 'Kesilgan va qo‘shilgan',    icon: Scissors,   faqatAdmin: false },
   { key: 'data',      label: "Ma'lumotlar",       izoh: 'Excel yuklash · arxiv',    icon: Database,   faqatAdmin: true  },
 ]
 
@@ -217,11 +217,11 @@ export default function App() {
         <main className="flex-1 min-w-0 overflow-hidden">
           {/* Mehmon uchun faqat analitika. Admin bo'lmasa boshqa sahifa
               ko'rsatilmaydi — chiqib ketganda ham ochiq qolib ketmasin. */}
-          {(page === 'analytics' || !admin) && (
+          {page === 'analytics' && (
             <ScreenAnalytics onGoToData={admin ? () => setPage('data') : undefined} />
           )}
           {page === 'prognoz' && admin && <Prognoz />}
-          {page === 'kesim' && admin && <KesimTahlili />}
+          {page === 'kesim' && <KesimTahlili />}
           {page === 'data' && admin && <Malumotlar onBack={() => setPage('analytics')} />}
         </main>
       </div>
