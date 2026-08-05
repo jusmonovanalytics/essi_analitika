@@ -18,9 +18,10 @@ export default function KesimTahlili() {
   })
 
   const rows = data?.kunlar ?? []
+  const totals = sumRows(rows)
 
   return (
-    <div className="h-full overflow-auto px-5 py-4 text-slate-200">
+    <div className="h-full overflow-hidden px-5 py-4 text-slate-200">
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div>
           <h1 className="text-lg font-semibold">Kesilgan va qo‘shilgan savdo</h1>
@@ -57,9 +58,9 @@ export default function KesimTahlili() {
                 {DIMENSIONS.map(x => <option key={x.key} value={x.key}>{x.label}</option>)}
               </select>
             </div>
-            <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950/40">
+            <div className="rounded-xl overflow-auto border border-slate-800 bg-slate-950/40" style={{ maxHeight: 'calc(100vh - 285px)' }}>
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-900 text-slate-500">
+              <thead className="sticky top-0 z-10 bg-slate-900 text-slate-500">
                 <tr>
                   <th className="text-left px-3 py-2.5">Sana</th>
                   <th className="text-right px-3 py-2.5">Fakt summa</th>
@@ -87,6 +88,12 @@ export default function KesimTahlili() {
                   </tr>
                 })}
               </tbody>
+              <tfoot className="sticky bottom-0 z-10 bg-slate-900 font-semibold border-t-2 border-blue-900/60"><tr>
+                <td className="px-3 py-2.5 text-blue-300">JAMI</td>
+                <Num value={totals.fakt_summa}/><Num value={totals.yak_summa}/>
+                <Num value={totals.kesilgan_summa} color="text-rose-300"/><Num value={totals.qoshilgan_summa} color="text-emerald-300"/>
+                <Num value={totals.kesilgan_qty}/><Num value={totals.qoshilgan_qty}/>
+              </tr></tfoot>
             </table>
           </div>
           </>}
@@ -121,6 +128,7 @@ function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: Drill
   const data = order ? detail.data : free.data
   const loading = order ? detail.isLoading : free.isLoading
   const error = order ? detail.error : free.error
+  const totals = sumRows(data?.items ?? [])
 
   const goBack = () => {
     if (!drill.path.length) return setDrill(null)
@@ -152,8 +160,8 @@ function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: Drill
     {loading && <div className="flex justify-center gap-2 py-16 text-slate-500"><Loader2 className="animate-spin" size={17}/>Yuklanmoqda…</div>}
     {error && <div className="p-4 text-red-300">{error.message}</div>}
     {order && detail.data?.info && <OrderInfo info={detail.data.info}/>}
-    {data && <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-950/40"><table className="w-full text-xs">
-      <thead className="bg-slate-900 text-slate-500"><tr><th className="text-left px-3 py-2.5">{order ? 'Mahsulot' : currentLabel}</th>
+    {data && <div className="rounded-xl overflow-auto border border-slate-800 bg-slate-950/40" style={{ maxHeight: 'calc(100vh - 285px)' }}><table className="w-full text-xs">
+      <thead className="sticky top-0 z-10 bg-slate-900 text-slate-500"><tr><th className="text-left px-3 py-2.5">{order ? 'Mahsulot' : currentLabel}</th>
         <th className="text-right px-3 py-2.5">Buyurtmalar</th><th className="text-right px-3 py-2.5">Mahsulotlar</th>
         <th className="text-right px-3 py-2.5">Fakt summa</th><th className="text-right px-3 py-2.5">Yakuniy summa</th>
         <th className="text-right px-3 py-2.5 text-rose-400">Kesilgan</th><th className="text-right px-3 py-2.5 text-emerald-400">Qo‘shilgan</th></tr></thead>
@@ -164,7 +172,13 @@ function DrillView({ drill, setDrill }: { drill: DrillState; setDrill: (v: Drill
           <td className="px-3 py-2 text-right text-slate-500">{'buyurtmalar' in row ? row.buyurtmalar : '—'}</td>
           <td className="px-3 py-2 text-right text-slate-500">{'mahsulotlar' in row ? row.mahsulotlar : '—'}</td>
           <Num value={row.fakt_summa}/><Num value={row.yak_summa}/><Num value={row.kesilgan_summa} color="text-rose-300"/><Num value={row.qoshilgan_summa} color="text-emerald-300"/>
-        </tr>})}</tbody></table></div>}
+        </tr>})}</tbody>
+      <tfoot className="sticky bottom-0 z-10 bg-slate-900 font-semibold border-t-2 border-blue-900/60"><tr>
+        <td className="px-3 py-2.5 text-blue-300">JAMI</td>
+        <td className="px-3 py-2.5 text-right text-slate-300">{totals.buyurtmalar || '—'}</td>
+        <td className="px-3 py-2.5 text-right text-slate-300">{totals.mahsulotlar || '—'}</td>
+        <Num value={totals.fakt_summa}/><Num value={totals.yak_summa}/><Num value={totals.kesilgan_summa} color="text-rose-300"/><Num value={totals.qoshilgan_summa} color="text-emerald-300"/>
+      </tr></tfoot></table></div>}
   </div>
 }
 
@@ -191,4 +205,22 @@ function Card({ title, value, color, icon }: { title: string; value: number; col
 
 function Num({ value, color = 'text-slate-400' }: { value: number; color?: string }) {
   return <td className={`px-3 py-2 text-right font-mono tabular-nums ${color}`}>{money(value)}</td>
+}
+
+type Totals = KesimMetric & { buyurtmalar: number; mahsulotlar: number }
+
+function sumRows(rows: Array<Partial<KesimMetric> & { buyurtmalar?: number; mahsulotlar?: number }>): Totals {
+  return rows.reduce<Totals>((a, r) => ({
+    fakt_summa: a.fakt_summa + (r.fakt_summa ?? 0),
+    yak_summa: a.yak_summa + (r.yak_summa ?? 0),
+    kesilgan_summa: a.kesilgan_summa + (r.kesilgan_summa ?? 0),
+    qoshilgan_summa: a.qoshilgan_summa + (r.qoshilgan_summa ?? 0),
+    fakt_qty: a.fakt_qty + (r.fakt_qty ?? 0), yak_qty: a.yak_qty + (r.yak_qty ?? 0),
+    kesilgan_qty: a.kesilgan_qty + (r.kesilgan_qty ?? 0),
+    qoshilgan_qty: a.qoshilgan_qty + (r.qoshilgan_qty ?? 0),
+    buyurtmalar: a.buyurtmalar + (r.buyurtmalar ?? 0),
+    mahsulotlar: a.mahsulotlar + (r.mahsulotlar ?? 0),
+  }), { fakt_summa: 0, yak_summa: 0, kesilgan_summa: 0, qoshilgan_summa: 0,
+    fakt_qty: 0, yak_qty: 0, kesilgan_qty: 0, qoshilgan_qty: 0,
+    buyurtmalar: 0, mahsulotlar: 0 })
 }
