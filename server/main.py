@@ -516,6 +516,11 @@ async def product_analytics(
     payment_type:    Optional[str] = Query(None, alias="paymentType"),
     delivery_man_id: Optional[str] = Query(None, alias="deliveryManId"),
     status:          Optional[str] = Query(None),
+    operator:        Optional[str] = Query(None),
+    delivery_name:   Optional[str] = Query(None, alias="deliveryName"),
+    department:      Optional[str] = Query(None),
+    product_id:      Optional[str] = Query(None, alias="productId"),
+    zone:            Optional[str] = Query(None),
     limit:           int           = Query(200, ge=1, le=1000),
     kun:             str           = Query("date_delivery", alias="dateField",
                                            pattern="^(created_date|date_delivery)$"),
@@ -524,6 +529,8 @@ async def product_analytics(
     return await product_sync.analytics(
         date_from, date_to, kun, _ints(agent_id), _strs(region),
         _strs(payment_type), _ints(delivery_man_id), _strs(status), limit,
+        _strs(operator), _strs(delivery_name), _strs(department),
+        _ints(product_id), _strs(zone),
     )
 
 

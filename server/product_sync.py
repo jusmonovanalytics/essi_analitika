@@ -205,7 +205,9 @@ async def status():
 
 async def analytics(date_from: str, date_to: str, date_field: str = "date_delivery",
                     agent_ids=None, regions=None, payment_types=None,
-                    delivery_man_ids=None, statuses=None, limit: int = 200):
+                    delivery_man_ids=None, statuses=None, limit: int = 200,
+                    operators=None, delivery_names=None, departments_filter=None,
+                    product_ids=None, zones=None):
     """Product sales KPIs and ranking, aggregated entirely by PostgreSQL."""
     product_table = "ritm_order_products_created" if date_field == "created_date" else "ritm_order_products_test"
     product_date = "p.created_date" if date_field == "created_date" else "p.sale_date"
@@ -224,8 +226,13 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
     ), selected_deliveries AS (
       SELECT DISTINCT delivery_man_name FROM orders_cache
       WHERE %s::int[] IS NOT NULL AND delivery_man_id = ANY(%s::int[])
-    ), filtered AS (
-      SELECT p.*
+    ), base_filtered AS (
+      SELECT p.*, CASE
+        WHEN p.market_type IN ('Диллеры','Наманган','Самарканд','Бухоро') THEN 'Диллеры'
+        WHEN p.market_type IN ('Магазин','VIP','OSDO','A - маркет','B - маркет','С - маркет','Розница') THEN 'Розница'
+        WHEN p.market_type IN ('Халк ретейл','Корзинка','Сеть','Сырная лавка','Макро','Урбант ретейл','Би-1','Магнум ретейл','Ассорти','Амирал Ритейл','Хавас') THEN 'Сеть'
+        WHEN p.market_type IN ('Бюджетная орг.','Школа / Садик','Гостиница','Кафе / Ресторан','Доставщики') THEN 'Хорика'
+        ELSE COALESCE(p.market_type,'Noma\u2019lum') END department
       FROM {product_table} p
       JOIN latest_orders o ON o.order_number = p.order_no
       WHERE {product_date} BETWEEN %s::date AND %s::date
@@ -236,6 +243,21 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
         AND (%s::int[] IS NULL OR o.delivery_man_id = ANY(%s::int[])
              OR p.delivery_man IN (SELECT delivery_man_name FROM selected_deliveries))
         AND (%s::text[] IS NULL OR o.status = ANY(%s::text[]))
+    ), filtered AS (
+      SELECT * FROM base_filtered
+      WHERE (%s::text[] IS NULL OR agent = ANY(%s::text[]))
+        AND (%s::text[] IS NULL OR delivery_man = ANY(%s::text[]))
+        AND (%s::text[] IS NULL OR department = ANY(%s::text[]))
+        AND (%s::bigint[] IS NULL OR product_id = ANY(%s::bigint[]))
+        AND (%s::text[] IS NULL OR border_name = ANY(%s::text[]))
+    ), filter_options AS (
+      SELECT jsonb_build_object(
+        'operators', COALESCE((SELECT jsonb_agg(x ORDER BY x) FROM (SELECT DISTINCT agent x FROM base_filtered WHERE agent IS NOT NULL) q),'[]'::jsonb),
+        'deliveries', COALESCE((SELECT jsonb_agg(x ORDER BY x) FROM (SELECT DISTINCT delivery_man x FROM base_filtered WHERE delivery_man IS NOT NULL) q),'[]'::jsonb),
+        'departments', COALESCE((SELECT jsonb_agg(x ORDER BY x) FROM (SELECT DISTINCT department x FROM base_filtered WHERE department IS NOT NULL) q),'[]'::jsonb),
+        'products', COALESCE((SELECT jsonb_agg(to_jsonb(q) ORDER BY q.name) FROM (SELECT DISTINCT product_id id,product_name name FROM base_filtered WHERE product_id IS NOT NULL) q),'[]'::jsonb),
+        'zones', COALESCE((SELECT jsonb_agg(x ORDER BY x) FROM (SELECT DISTINCT border_name x FROM base_filtered WHERE border_name IS NOT NULL) q),'[]'::jsonb)
+      ) value
     ), header_totals AS (
       SELECT COUNT(DISTINCT o.order_number)::bigint all_order_count
       FROM latest_orders o
@@ -281,12 +303,7 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
       SELECT COALESCE(border_name,'Noma\u2019lum') name,COUNT(DISTINCT order_no)::bigint order_count,
         SUM(total_fact_price)::numeric total_sum FROM filtered GROUP BY border_name
     ), departments AS (
-      SELECT CASE
-        WHEN market_type IN ('Диллеры','Наманган','Самарканд','Бухоро') THEN 'Диллеры'
-        WHEN market_type IN ('Магазин','VIP','OSDO','A - маркет','B - маркет','С - маркет','Розница') THEN 'Розница'
-        WHEN market_type IN ('Халк ретейл','Корзинка','Сеть','Сырная лавка','Макро','Урбант ретейл','Би-1','Магнум ретейл','Ассорти','Амирал Ритейл','Хавас') THEN 'Сеть'
-        WHEN market_type IN ('Бюджетная орг.','Школа / Садик','Гостиница','Кафе / Ресторан','Доставщики') THEN 'Хорика'
-        ELSE COALESCE(market_type,'Noma\u2019lum') END name,
+      SELECT department name,
         COUNT(DISTINCT order_no)::bigint order_count,SUM(total_fact_price)::numeric total_sum
       FROM filtered GROUP BY 1
     ), market_types AS (
@@ -333,12 +350,16 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
       'departments', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC) FROM departments x),'[]'::jsonb),
       'market_types', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC) FROM market_types x),'[]'::jsonb),
       'payments', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC) FROM payments x),'[]'::jsonb)
+      , 'filter_options', (SELECT value FROM filter_options)
     ) result
     """
     args = [agent_ids, agent_ids, delivery_man_ids, delivery_man_ids,
             date_from, date_to, agent_ids, agent_ids, regions, regions,
             payment_types, payment_types, delivery_man_ids, delivery_man_ids,
             statuses, statuses,
+            operators, operators, delivery_names, delivery_names,
+            departments_filter, departments_filter, product_ids, product_ids,
+            zones, zones,
             date_from, date_to, agent_ids, agent_ids, regions, regions,
             payment_types, payment_types, delivery_man_ids, delivery_man_ids,
             statuses, statuses, limit]
@@ -353,7 +374,8 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
             "hourly": result["hourly"], "daily": result["daily"],
             "agents": result["agents"], "deliveries": result["deliveries"],
             "regions": result["regions"], "departments": result["departments"],
-            "market_types": result["market_types"], "payments": result["payments"]}
+            "market_types": result["market_types"], "payments": result["payments"],
+            "filter_options": result["filter_options"]}
 
 
 async def delete_range(date_from,date_to):
