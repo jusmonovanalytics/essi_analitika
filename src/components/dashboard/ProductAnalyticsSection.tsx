@@ -13,6 +13,7 @@ const fmt = (value: number, digits = 0) => new Intl.NumberFormat('ru-RU', {
 }).format(Number(value || 0))
 
 const panel = 'rounded-xl border overflow-hidden bg-slate-900/70 border-slate-700/60'
+const emptyFilters = (): ProductDashboardFilters => ({ operators:[], deliveries:[], departments:[], productIds:[], zones:[] })
 
 type FilterValue = string | number
 function MultiFilter({ label, values, options, onChange }: { label: string; values: FilterValue[]; options: Array<{ value: FilterValue; label: string }>; onChange: (values: FilterValue[]) => void }) {
@@ -66,12 +67,17 @@ function Breakdown({ title, subtitle, rows, color }: { title: string; subtitle: 
 
 export default function ProductAnalyticsSection() {
   const dateField = useAppStore(s => s.dateField)
-  const [filters, setFilters] = useState<ProductDashboardFilters>({ operators:[], deliveries:[], departments:[], productIds:[], zones:[] })
-  const { data, isLoading, isError, isFetching } = useProductAnalytics(500, filters)
+  const dateRange = useAppStore(s => s.dateRange)
+  const [draftFilters, setDraftFilters] = useState<ProductDashboardFilters>(emptyFilters)
+  const [appliedFilters, setAppliedFilters] = useState<ProductDashboardFilters>(emptyFilters)
+  const { data, isLoading, isError, isFetching } = useProductAnalytics(500, appliedFilters)
   const [sort, setSort] = useState<SortKey>('total_sum')
   const [query, setQuery] = useState('')
-  const activeFilterCount = filters.operators.length + filters.deliveries.length + filters.departments.length + filters.productIds.length + filters.zones.length
-  const updateFilter = <K extends keyof ProductDashboardFilters>(key: K, values: ProductDashboardFilters[K]) => setFilters(current => ({ ...current, [key]: values }))
+  const activeFilterCount = appliedFilters.operators.length + appliedFilters.deliveries.length + appliedFilters.departments.length + appliedFilters.productIds.length + appliedFilters.zones.length
+  const draftFilterCount = draftFilters.operators.length + draftFilters.deliveries.length + draftFilters.departments.length + draftFilters.productIds.length + draftFilters.zones.length
+  const hasPendingChanges = JSON.stringify(draftFilters) !== JSON.stringify(appliedFilters)
+  const updateFilter = <K extends keyof ProductDashboardFilters>(key: K, values: ProductDashboardFilters[K]) => setDraftFilters(current => ({ ...current, [key]: values }))
+  const applyFilters = () => setAppliedFilters({ ...draftFilters, operators:[...draftFilters.operators], deliveries:[...draftFilters.deliveries], departments:[...draftFilters.departments], productIds:[...draftFilters.productIds], zones:[...draftFilters.zones] })
 
   const items = useMemo(() => {
     const q = query.trim().toLocaleLowerCase()
@@ -108,7 +114,7 @@ export default function ProductAnalyticsSection() {
     <div className="flex items-center justify-between gap-4">
       <div>
         <div className="flex items-center gap-2"><PackageSearch size={17} className="text-emerald-400"/><h2 className="font-bold text-slate-100">Mahsulotlar boshqaruv paneli</h2></div>
-        <p className="text-[11px] text-slate-500 mt-0.5">{sourceLabel} · Operator, dostavshik, otdel, zona va produkt kesimlari</p>
+        <p className="text-[11px] text-slate-500 mt-0.5">{dateRange.from} — {dateRange.to} · {sourceLabel} · Operator, dostavshik, otdel, zona va produkt kesimlari</p>
       </div>
       <div className="flex items-center gap-2 text-[11px]">
         <span className={`w-1.5 h-1.5 rounded-full ${isFetching ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
@@ -118,13 +124,17 @@ export default function ProductAnalyticsSection() {
     </div>
 
     <div className={`${panel} px-3 py-2.5 flex flex-wrap items-center gap-2 overflow-visible`}>
-      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mr-1"><Filter size={13} className="text-blue-400"/><span>Dashboard filtrlari</span>{activeFilterCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300 tabular-nums">{activeFilterCount}</span>}</div>
-      <MultiFilter label="Operator" values={filters.operators} options={filterOptions.operators.map(value => ({ value, label:value }))} onChange={values => updateFilter('operators', values as string[])} />
-      <MultiFilter label="Dostavshik" values={filters.deliveries} options={filterOptions.deliveries.map(value => ({ value, label:value }))} onChange={values => updateFilter('deliveries', values as string[])} />
-      <MultiFilter label="Otdel" values={filters.departments} options={filterOptions.departments.map(value => ({ value, label:value }))} onChange={values => updateFilter('departments', values as string[])} />
-      <MultiFilter label="Produkt" values={filters.productIds} options={filterOptions.products.map(item => ({ value:item.id, label:item.name }))} onChange={values => updateFilter('productIds', values as number[])} />
-      <MultiFilter label="Zona" values={filters.zones} options={filterOptions.zones.map(value => ({ value, label:value }))} onChange={values => updateFilter('zones', values as string[])} />
-      {activeFilterCount > 0 && <button onClick={() => setFilters({ operators:[], deliveries:[], departments:[], productIds:[], zones:[] })} className="ml-auto h-8 px-3 rounded-lg border border-red-500/30 bg-red-500/5 text-[11px] text-red-300 hover:bg-red-500/10 flex items-center gap-1.5"><X size={12}/>Barchasini tozalash</button>}
+      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mr-1"><Filter size={13} className="text-blue-400"/><span>Dashboard filtrlari</span>{activeFilterCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300 tabular-nums">{activeFilterCount} faol</span>}{hasPendingChanges && <span className="px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300">tanlov tayyor</span>}</div>
+      <MultiFilter label="Operator" values={draftFilters.operators} options={filterOptions.operators.map(value => ({ value, label:value }))} onChange={values => updateFilter('operators', values as string[])} />
+      <MultiFilter label="Dostavshik" values={draftFilters.deliveries} options={filterOptions.deliveries.map(value => ({ value, label:value }))} onChange={values => updateFilter('deliveries', values as string[])} />
+      <MultiFilter label="Otdel" values={draftFilters.departments} options={filterOptions.departments.map(value => ({ value, label:value }))} onChange={values => updateFilter('departments', values as string[])} />
+      <MultiFilter label="Produkt" values={draftFilters.productIds} options={filterOptions.products.map(item => ({ value:item.id, label:item.name }))} onChange={values => updateFilter('productIds', values as number[])} />
+      <MultiFilter label="Zona" values={draftFilters.zones} options={filterOptions.zones.map(value => ({ value, label:value }))} onChange={values => updateFilter('zones', values as string[])} />
+      <div className="ml-auto flex items-center gap-2">
+        {draftFilterCount > 0 && <button onClick={() => setDraftFilters(emptyFilters())} className="h-8 px-2.5 rounded-lg border border-red-500/25 text-[11px] text-red-300 hover:bg-red-500/10 flex items-center gap-1"><X size={12}/>Tozalash</button>}
+        {hasPendingChanges && <button onClick={() => setDraftFilters(appliedFilters)} className="h-8 px-2.5 rounded-lg border border-slate-700 text-[11px] text-slate-400 hover:text-slate-200">Bekor qilish</button>}
+        <button onClick={applyFilters} disabled={!hasPendingChanges || isFetching} className="h-8 px-4 rounded-lg border border-blue-500/60 bg-blue-500/20 text-[11px] font-semibold text-blue-200 hover:bg-blue-500/30 disabled:opacity-35 disabled:cursor-not-allowed">{isFetching ? 'Qo‘llanmoqda…' : 'Qabul qilish'}</button>
+      </div>
     </div>
 
     <div className="grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-2">
