@@ -714,7 +714,7 @@ export default function ScreenAnalytics({ onGoToData }: { onGoToData?: () => voi
       {view === 'orders' && kpis && <KpiRow d={kpis} />}
 
       {view === 'products' && (
-        <div className="flex-1 min-h-0 overflow-y-auto p-3">
+        <div className="flex-1 min-h-0 overflow-hidden p-2">
           <ProductAnalyticsSection />
         </div>
       )}
