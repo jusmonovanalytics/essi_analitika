@@ -507,6 +507,26 @@ async def data_delete_all(confirm: str = Query("")):
     return {"deleted": deleted}
 
 
+@app.get("/api/product-analytics")
+async def product_analytics(
+    date_from:       str           = Query(_today(), alias="dateFrom"),
+    date_to:         str           = Query(_today(), alias="dateTo"),
+    agent_id:        Optional[str] = Query(None, alias="agentId"),
+    region:          Optional[str] = Query(None),
+    payment_type:    Optional[str] = Query(None, alias="paymentType"),
+    delivery_man_id: Optional[str] = Query(None, alias="deliveryManId"),
+    status:          Optional[str] = Query(None),
+    limit:           int           = Query(200, ge=1, le=1000),
+    kun:             str           = Query("date_delivery", alias="dateField",
+                                           pattern="^(created_date|date_delivery)$"),
+):
+    """Product quantity, value and distinct-order metrics from PostgreSQL."""
+    return await product_sync.analytics(
+        date_from, date_to, kun, _ints(agent_id), _strs(region),
+        _strs(payment_type), _ints(delivery_man_id), _strs(status), limit,
+    )
+
+
 # Product-line data management (RITM delivery_product)
 @app.get("/api/data/products/status", dependencies=[Depends(prognoz.admin)])
 async def product_data_status():
