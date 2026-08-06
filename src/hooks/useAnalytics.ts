@@ -4,7 +4,7 @@ import * as api from '../api/endpoints'
 import type { DateFilters } from '../api/endpoints'
 import type { StatusPoint } from '../types/api'
 import type { ExtendedChartsData, DeliveryExtData } from '../types/api'
-import type { ProductAnalyticsData } from '../types/api'
+import type { ProductAnalyticsData, ProductDashboardFilters } from '../types/api'
 
 // 2-minute refresh for live periods (today / yesterday / week / month)
 const LIVE_MS = 2 * 60 * 1000
@@ -94,11 +94,11 @@ export function useCharts() {
   })
 }
 
-export function useProductAnalytics(limit = 500) {
+export function useProductAnalytics(limit = 500, productFilters?: ProductDashboardFilters) {
   const f = useFilterState()
   return useQuery({
-    queryKey: ['productAnalytics', f, limit],
-    queryFn: (): Promise<ProductAnalyticsData> => api.fetchProductAnalytics(f, limit),
+    queryKey: ['productAnalytics', f, limit, productFilters],
+    queryFn: (): Promise<ProductAnalyticsData> => api.fetchProductAnalytics(f, limit, productFilters),
     refetchInterval: 5 * 60 * 1000,
     refetchIntervalInBackground: true,
     staleTime: 60_000,

@@ -137,6 +137,21 @@ export interface ProductAnalyticsData {
   departments: ProductBreakdownPoint[]
   market_types: ProductBreakdownPoint[]
   payments: ProductBreakdownPoint[]
+  filter_options: {
+    operators: string[]
+    deliveries: string[]
+    departments: string[]
+    products: Array<{ id: number; name: string }>
+    zones: string[]
+  }
+}
+
+export interface ProductDashboardFilters {
+  operators: string[]
+  deliveries: string[]
+  departments: string[]
+  productIds: number[]
+  zones: string[]
 }
 
 export interface ProductBreakdownPoint {

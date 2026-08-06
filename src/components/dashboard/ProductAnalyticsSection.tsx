@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Activity, Boxes, Clock3, PackageSearch, Percent, ReceiptText, RotateCcw, Search, TrendingUp, WalletCards } from 'lucide-react'
+import { Activity, Boxes, ChevronDown, Clock3, Filter, PackageSearch, Percent, ReceiptText, RotateCcw, Search, TrendingUp, WalletCards, X } from 'lucide-react'
 import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useProductAnalytics } from '../../hooks/useAnalytics'
 import { useAppStore } from '../../store/useAppStore'
 import { fmtSum } from '../../utils/formatters'
-import type { ProductAnalyticsItem, ProductBreakdownPoint } from '../../types/api'
+import type { ProductAnalyticsItem, ProductBreakdownPoint, ProductDashboardFilters } from '../../types/api'
 
 type SortKey = 'total_sum' | 'quantity' | 'order_count' | 'avg_price' | 'share_pct'
 
@@ -13,6 +13,21 @@ const fmt = (value: number, digits = 0) => new Intl.NumberFormat('ru-RU', {
 }).format(Number(value || 0))
 
 const panel = 'rounded-xl border overflow-hidden bg-slate-900/70 border-slate-700/60'
+
+type FilterValue = string | number
+function MultiFilter({ label, values, options, onChange }: { label: string; values: FilterValue[]; options: Array<{ value: FilterValue; label: string }>; onChange: (values: FilterValue[]) => void }) {
+  const selected = new Set(values.map(String))
+  return <details className="relative group">
+    <summary className={`list-none cursor-pointer h-8 min-w-36 px-3 rounded-lg border flex items-center gap-2 text-[11px] ${values.length ? 'border-blue-500/60 bg-blue-500/10 text-blue-200' : 'border-slate-700 bg-slate-900/80 text-slate-400'}`}>
+      <span className="flex-1 truncate">{label}{values.length ? ` · ${values.length}` : ''}</span><ChevronDown size={12} className="group-open:rotate-180 transition-transform" />
+    </summary>
+    <div className="absolute z-50 top-10 left-0 w-72 max-h-72 overflow-auto rounded-xl border border-slate-700 bg-slate-950 shadow-2xl p-2">
+      <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-800 mb-1"><span className="text-[10px] uppercase tracking-wider text-slate-500">{label}</span>{values.length > 0 && <button onClick={() => onChange([])} className="text-[10px] text-blue-400 hover:text-blue-300">Tozalash</button>}</div>
+      {options.map(option => <label key={String(option.value)} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-800/70 cursor-pointer text-[11px] text-slate-300"><input type="checkbox" checked={selected.has(String(option.value))} onChange={() => onChange(selected.has(String(option.value)) ? values.filter(value => String(value) !== String(option.value)) : [...values, option.value])} className="accent-blue-500"/><span className="truncate" title={option.label}>{option.label}</span></label>)}
+      {!options.length && <div className="px-2 py-4 text-center text-[10px] text-slate-600">Qiymatlar mavjud emas</div>}
+    </div>
+  </details>
+}
 
 function RankedBars({ rows, metric, color }: {
   rows: ProductAnalyticsItem[]
@@ -51,9 +66,12 @@ function Breakdown({ title, subtitle, rows, color }: { title: string; subtitle: 
 
 export default function ProductAnalyticsSection() {
   const dateField = useAppStore(s => s.dateField)
-  const { data, isLoading, isError, isFetching } = useProductAnalytics()
+  const [filters, setFilters] = useState<ProductDashboardFilters>({ operators:[], deliveries:[], departments:[], productIds:[], zones:[] })
+  const { data, isLoading, isError, isFetching } = useProductAnalytics(500, filters)
   const [sort, setSort] = useState<SortKey>('total_sum')
   const [query, setQuery] = useState('')
+  const activeFilterCount = filters.operators.length + filters.deliveries.length + filters.departments.length + filters.productIds.length + filters.zones.length
+  const updateFilter = <K extends keyof ProductDashboardFilters>(key: K, values: ProductDashboardFilters[K]) => setFilters(current => ({ ...current, [key]: values }))
 
   const items = useMemo(() => {
     const q = query.trim().toLocaleLowerCase()
@@ -66,6 +84,7 @@ export default function ProductAnalyticsSection() {
   if (isError || !data) return <div className="h-full flex items-center justify-center text-sm text-red-400">Mahsulotlar tahlilini yuklab bo‘lmadi</div>
 
   const { summary } = data
+  const filterOptions = data.filter_options ?? { operators:[], deliveries:[], departments:[], products:[], zones:[] }
   const topSales = [...data.items].sort((a,b) => b.total_sum-a.total_sum).slice(0, 7)
   const topQuantity = [...data.items].sort((a,b) => b.quantity-a.quantity).slice(0, 7)
   const maxType = Math.max(...data.types.map(type => Number(type.total_sum)), 1)
@@ -96,6 +115,16 @@ export default function ProductAnalyticsSection() {
         <span className="text-slate-400">{isFetching ? 'Yangilanmoqda' : '5 daqiqalik monitoring'}</span>
         {freshness && <span className="flex items-center gap-1 text-slate-500 border-l border-slate-700 pl-2"><Clock3 size={11}/>{freshness.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>}
       </div>
+    </div>
+
+    <div className={`${panel} px-3 py-2.5 flex flex-wrap items-center gap-2 overflow-visible`}>
+      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mr-1"><Filter size={13} className="text-blue-400"/><span>Dashboard filtrlari</span>{activeFilterCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300 tabular-nums">{activeFilterCount}</span>}</div>
+      <MultiFilter label="Operator" values={filters.operators} options={filterOptions.operators.map(value => ({ value, label:value }))} onChange={values => updateFilter('operators', values as string[])} />
+      <MultiFilter label="Dostavshik" values={filters.deliveries} options={filterOptions.deliveries.map(value => ({ value, label:value }))} onChange={values => updateFilter('deliveries', values as string[])} />
+      <MultiFilter label="Otdel" values={filters.departments} options={filterOptions.departments.map(value => ({ value, label:value }))} onChange={values => updateFilter('departments', values as string[])} />
+      <MultiFilter label="Produkt" values={filters.productIds} options={filterOptions.products.map(item => ({ value:item.id, label:item.name }))} onChange={values => updateFilter('productIds', values as number[])} />
+      <MultiFilter label="Zona" values={filters.zones} options={filterOptions.zones.map(value => ({ value, label:value }))} onChange={values => updateFilter('zones', values as string[])} />
+      {activeFilterCount > 0 && <button onClick={() => setFilters({ operators:[], deliveries:[], departments:[], productIds:[], zones:[] })} className="ml-auto h-8 px-3 rounded-lg border border-red-500/30 bg-red-500/5 text-[11px] text-red-300 hover:bg-red-500/10 flex items-center gap-1.5"><X size={12}/>Barchasini tozalash</button>}
     </div>
 
     <div className="grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-2">

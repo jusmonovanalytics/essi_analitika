@@ -2,7 +2,7 @@ import type {
   KPIData, AgentData, DeliveryData, LiveOrderData,
   ChartsData, ClientData, FilterOptions, ActiveFilters, StatusPoint,
   ExtendedChartsData, DeliveryExtData,
-  ProductAnalyticsData,
+  ProductAnalyticsData, ProductDashboardFilters,
 } from '../types/api'
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
@@ -99,10 +99,13 @@ export const fetchDeliveriesExtended = (f: DateFilters, limit = 30) =>
 export const triggerSync = () =>
   fetch(`${BASE}/api/sync/trigger`, { method: 'POST' }).then(r => r.json())
 
-export const fetchProductAnalytics = (f: DateFilters, limit = 500) =>
+export const fetchProductAnalytics = (f: DateFilters, limit = 500, pf?: ProductDashboardFilters) =>
   get<ProductAnalyticsData>('/api/product-analytics', {
     dateFrom: f.dateFrom, dateTo: f.dateTo, dateField: f.dateField, limit,
     agentId: joinIds(f.agentId), region: joinStrs(f.region),
     paymentType: joinStrs(f.paymentType), deliveryManId: joinIds(f.deliveryManId),
-    status: joinStrs(f.statusFilter),
+      status: joinStrs(f.statusFilter),
+      operator: joinStrs(pf?.operators), deliveryName: joinStrs(pf?.deliveries),
+      department: joinStrs(pf?.departments), productId: joinIds(pf?.productIds),
+      zone: joinStrs(pf?.zones),
   })
