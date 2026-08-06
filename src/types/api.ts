@@ -91,6 +91,28 @@ export interface StatusPoint {
   share_pct: number
 }
 
+export interface ProductAnalyticsItem {
+  product_id: number
+  product_name: string
+  product_type: string
+  order_count: number
+  quantity: number
+  total_sum: number
+  avg_price: number
+  share_pct: number
+}
+
+export interface ProductAnalyticsData {
+  summary: {
+    order_count: number
+    product_count: number
+    quantity: number
+    total_sum: number
+    refreshed_at: string | null
+  }
+  items: ProductAnalyticsItem[]
+}
+
 // ─── Weekday / Market type ───────────────────────────────────────────────────
 export interface WeekdayPoint {
   weekday_num: number

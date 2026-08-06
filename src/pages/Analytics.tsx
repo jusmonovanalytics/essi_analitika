@@ -11,6 +11,7 @@ import { fmtSum } from '../utils/formatters'
 import { useT } from '../i18n'
 import { STATUS_CONFIG } from '../types'
 import { cn } from '../utils/cn'
+import ProductAnalyticsSection from '../components/dashboard/ProductAnalyticsSection'
 
 function ChartHeader({ title, hint }: { title: string; hint?: string }) {
   return (
@@ -225,6 +226,8 @@ export default function Analytics() {
           agentName={topAgent}
           topRegion={topRegion}
         />
+
+        <ProductAnalyticsSection />
 
         {/* Row 1: Hourly (wider) + Payment (donut) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">

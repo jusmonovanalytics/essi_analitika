@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS ritm_order_products_test (
  loaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(sale_date,order_no,product_id));
 CREATE INDEX IF NOT EXISTS idx_ritm_products_sale_date ON ritm_order_products_test(sale_date);
 CREATE INDEX IF NOT EXISTS idx_ritm_products_order_no ON ritm_order_products_test(order_no);
+CREATE INDEX IF NOT EXISTS idx_ritm_products_created_at ON ritm_order_products_test(order_created_at);
+CREATE INDEX IF NOT EXISTS idx_ritm_products_product_id ON ritm_order_products_test(product_id);
 CREATE TABLE IF NOT EXISTS product_sync_logs (
  id BIGSERIAL PRIMARY KEY, started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
  finished_at TIMESTAMPTZ, date_from DATE NOT NULL, date_to DATE NOT NULL,
@@ -139,6 +141,75 @@ async def status():
           pg_size_pretty(pg_total_relation_size('ritm_order_products_test')) table_size
           FROM ritm_order_products_test"""); row=await cur.fetchone()
     return {k:(v.isoformat() if hasattr(v,'isoformat') else v) for k,v in row.items()}
+
+
+async def analytics(date_from: str, date_to: str, date_field: str = "date_delivery",
+                    agent_ids=None, regions=None, payment_types=None,
+                    delivery_man_ids=None, statuses=None, limit: int = 200):
+    """Product sales KPIs and ranking, aggregated entirely by PostgreSQL."""
+    sql = """
+    WITH latest_orders AS (
+      SELECT DISTINCT ON (order_number)
+        order_number, created_date, user_id, delivery_man_id, market_border,
+        payment_type, status
+      FROM orders_cache
+      WHERE order_number IS NOT NULL
+      ORDER BY order_number, synced_at DESC, id DESC
+    ), selected_agents AS (
+      SELECT DISTINCT user_name FROM orders_cache
+      WHERE %s::int[] IS NOT NULL AND user_id = ANY(%s::int[])
+    ), selected_deliveries AS (
+      SELECT DISTINCT delivery_man_name FROM orders_cache
+      WHERE %s::int[] IS NOT NULL AND delivery_man_id = ANY(%s::int[])
+    ), filtered AS (
+      SELECT p.*
+      FROM ritm_order_products_test p
+      LEFT JOIN latest_orders o ON o.order_number = p.order_no
+      WHERE p.sale_date BETWEEN %s::date AND %s::date
+        AND (%s::int[] IS NULL OR o.user_id = ANY(%s::int[])
+             OR p.agent IN (SELECT user_name FROM selected_agents))
+        AND (%s::text[] IS NULL OR COALESCE(o.market_border,p.border_name) = ANY(%s::text[]))
+        AND (%s::text[] IS NULL OR COALESCE(o.payment_type,p.payment_type) = ANY(%s::text[]))
+        AND (%s::int[] IS NULL OR o.delivery_man_id = ANY(%s::int[])
+             OR p.delivery_man IN (SELECT delivery_man_name FROM selected_deliveries))
+        AND (%s::text[] IS NULL OR o.status = ANY(%s::text[]))
+    ), product_rows AS (
+      SELECT product_id, COALESCE(product_name,'Noma\u2019lum mahsulot') product_name,
+        COALESCE(product_type,'Noma\u2019lum') product_type,
+        COUNT(DISTINCT order_no)::bigint order_count,
+        SUM(amount)::numeric quantity,
+        SUM(total_fact_price)::numeric total_sum,
+        CASE WHEN SUM(amount) <> 0 THEN SUM(total_fact_price)/SUM(amount) ELSE 0 END::numeric avg_price
+      FROM filtered
+      GROUP BY product_id, product_name, product_type
+    ), totals AS (
+      SELECT COUNT(DISTINCT order_no)::bigint order_count,
+        COUNT(DISTINCT product_id)::bigint product_count,
+        COALESCE(SUM(amount),0)::numeric quantity,
+        COALESCE(SUM(total_fact_price),0)::numeric total_sum,
+        MAX(loaded_at) refreshed_at
+      FROM filtered
+    )
+    SELECT jsonb_build_object(
+      'summary', (SELECT to_jsonb(t) FROM totals t),
+      'items', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC)
+        FROM (SELECT r.*, CASE WHEN t.total_sum <> 0 THEN r.total_sum/t.total_sum*100 ELSE 0 END::numeric share_pct
+              FROM product_rows r CROSS JOIN totals t
+              ORDER BY r.total_sum DESC LIMIT %s) x), '[]'::jsonb)
+    ) result
+    """
+    args = [agent_ids, agent_ids, delivery_man_ids, delivery_man_ids,
+            date_from, date_to, agent_ids, agent_ids, regions, regions,
+            payment_types, payment_types, delivery_man_ids, delivery_man_ids,
+            statuses, statuses, limit]
+    pool = await db.get_pool()
+    async with pool.connection() as conn:
+      async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(sql, args)
+        result = (await cur.fetchone())["result"]
+    summary = result["summary"] or {}
+    summary["refreshed_at"] = summary.get("refreshed_at")
+    return {"summary": summary, "items": result["items"]}
 
 
 async def delete_range(date_from,date_to):
