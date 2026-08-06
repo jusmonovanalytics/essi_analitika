@@ -110,9 +110,19 @@ export interface ProductAnalyticsData {
     product_count: number
     quantity: number
     total_sum: number
+    avg_order_sum: number
+    top10_share_pct: number
     refreshed_at: string | null
   }
   items: ProductAnalyticsItem[]
+  types: Array<{
+    product_type: string
+    product_count: number
+    order_count: number
+    quantity: number
+    total_sum: number
+    share_pct: number
+  }>
 }
 
 // ─── Weekday / Market type ───────────────────────────────────────────────────

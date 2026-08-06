@@ -99,7 +99,7 @@ export function useProductAnalytics(limit = 500) {
   return useQuery({
     queryKey: ['productAnalytics', f, limit],
     queryFn: (): Promise<ProductAnalyticsData> => api.fetchProductAnalytics(f, limit),
-    refetchInterval: LIVE_MS,
+    refetchInterval: 5 * 60 * 1000,
     refetchIntervalInBackground: true,
     staleTime: 60_000,
   })

@@ -94,7 +94,7 @@ async def fetch_day(client: httpx.AsyncClient, day: str, model: str = "delivery_
     return data
 
 
-async def sync_range(date_from: str, date_to: str) -> int:
+async def sync_range(date_from: str, date_to: str, full: bool = True) -> int:
     start, end = date.fromisoformat(date_from), date.fromisoformat(date_to)
     log_id = await add_log(date_from, date_to)
     loaded = 0
@@ -104,8 +104,8 @@ async def sync_range(date_from: str, date_to: str) -> int:
             while day <= end:
                 delivery_rows = await fetch_day(client, day.isoformat(), "delivery_product")
                 created_rows = await fetch_day(client, day.isoformat(), "order_product")
-                loaded += await replace_day(day, delivery_rows)
-                loaded += await replace_created_day(day, created_rows)
+                loaded += await replace_day(day, delivery_rows, full)
+                loaded += await replace_created_day(day, created_rows, full)
                 await update_log(log_id, loaded)
                 day += timedelta(days=1)
         await finish_log(log_id, loaded, "success")
@@ -119,10 +119,15 @@ async def sync_range(date_from: str, date_to: str) -> int:
 
 
 async def sync_loop():
+    last_full = None
     while True:
         today = datetime.now().date().isoformat()
         try:
-            await sync_range(today, today)
+            now = datetime.now()
+            full = last_full is None or (now - last_full).total_seconds() >= 30 * 60
+            await sync_range(today, today, full=full)
+            if full:
+                last_full = now
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -130,7 +135,7 @@ async def sync_loop():
         await asyncio.sleep(INTERVAL)
 
 
-async def replace_day(day, rows):
+async def replace_day(day, rows, full=True):
     vals=[(day,int(r["order_number"]),int(r["product_name"]),r.get("product_id"),
       r.get("product_type_id"),r.get("user_id"),r.get("delivery_man_id"),r.get("market_id"),
       r.get("market_type_id"),r.get("border_id"),r.get("payment_type"),r.get("fact_amount") or 0,
@@ -139,18 +144,27 @@ async def replace_day(day, rows):
     pool=await db.get_pool()
     async with pool.connection() as conn:
       async with conn.cursor() as cur:
-        await cur.execute("DELETE FROM ritm_order_products_test WHERE sale_date=%s",[day])
+        if full:
+          await cur.execute("DELETE FROM ritm_order_products_test WHERE sale_date=%s",[day])
         if vals: await cur.executemany("""INSERT INTO ritm_order_products_test
           (sale_date,order_no,product_id,product_name,product_type,agent,delivery_man,market,
            market_type,border_name,payment_type,amount,return_amount,total_discount,total_price,total_fact_price,raw)
-          VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",vals)
+          VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+          ON CONFLICT (sale_date,order_no,product_id) DO UPDATE SET
+            product_name=EXCLUDED.product_name,product_type=EXCLUDED.product_type,
+            agent=EXCLUDED.agent,delivery_man=EXCLUDED.delivery_man,market=EXCLUDED.market,
+            market_type=EXCLUDED.market_type,border_name=EXCLUDED.border_name,
+            payment_type=EXCLUDED.payment_type,amount=EXCLUDED.amount,
+            return_amount=EXCLUDED.return_amount,total_discount=EXCLUDED.total_discount,
+            total_price=EXCLUDED.total_price,total_fact_price=EXCLUDED.total_fact_price,
+            raw=EXCLUDED.raw,loaded_at=NOW()""",vals)
         await cur.execute("""UPDATE ritm_order_products_test p SET order_created_at=o.created_date
           FROM orders_cache o WHERE p.sale_date=%s AND o.order_number=p.order_no""",[day])
       await conn.commit()
     return len(vals)
 
 
-async def replace_created_day(day, rows):
+async def replace_created_day(day, rows, full=True):
     vals=[(day,int(r["order_id"]),int(r["product_name"]),r.get("product_id"),
       r.get("product_type_id"),r.get("user_id"),r.get("delivery_man_id"),r.get("market_id"),
       r.get("market_type_id"),r.get("border_id"),r.get("payment_type"),r.get("fact_amount") or 0,
@@ -159,11 +173,20 @@ async def replace_created_day(day, rows):
     pool=await db.get_pool()
     async with pool.connection() as conn:
       async with conn.cursor() as cur:
-        await cur.execute("DELETE FROM ritm_order_products_created WHERE created_date=%s",[day])
+        if full:
+          await cur.execute("DELETE FROM ritm_order_products_created WHERE created_date=%s",[day])
         if vals: await cur.executemany("""INSERT INTO ritm_order_products_created
           (created_date,order_no,product_id,product_name,product_type,agent,delivery_man,market,
            market_type,border_name,payment_type,amount,return_amount,total_discount,total_price,total_fact_price,raw)
-          VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",vals)
+          VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+          ON CONFLICT (created_date,order_no,product_id) DO UPDATE SET
+            product_name=EXCLUDED.product_name,product_type=EXCLUDED.product_type,
+            agent=EXCLUDED.agent,delivery_man=EXCLUDED.delivery_man,market=EXCLUDED.market,
+            market_type=EXCLUDED.market_type,border_name=EXCLUDED.border_name,
+            payment_type=EXCLUDED.payment_type,amount=EXCLUDED.amount,
+            return_amount=EXCLUDED.return_amount,total_discount=EXCLUDED.total_discount,
+            total_price=EXCLUDED.total_price,total_fact_price=EXCLUDED.total_fact_price,
+            raw=EXCLUDED.raw,loaded_at=NOW()""",vals)
       await conn.commit()
     return len(vals)
 
@@ -231,6 +254,12 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
         CASE WHEN SUM(amount) <> 0 THEN SUM(total_fact_price)/SUM(amount) ELSE 0 END::numeric avg_price
       FROM filtered
       GROUP BY product_id, product_name, product_type
+    ), product_types AS (
+      SELECT COALESCE(product_type,'Noma\u2019lum') product_type,
+        COUNT(DISTINCT product_id)::bigint product_count,
+        COUNT(DISTINCT order_no)::bigint order_count,
+        SUM(amount)::numeric quantity,SUM(total_fact_price)::numeric total_sum
+      FROM filtered GROUP BY product_type
     ), totals AS (
       SELECT COUNT(DISTINCT order_no)::bigint order_count,
         COUNT(DISTINCT product_id)::bigint product_count,
@@ -242,12 +271,18 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
     SELECT jsonb_build_object(
       'summary', (SELECT to_jsonb(t) || jsonb_build_object(
           'all_order_count', h.all_order_count,
-          'orders_without_products', GREATEST(h.all_order_count-t.order_count,0))
+          'orders_without_products', GREATEST(h.all_order_count-t.order_count,0),
+          'avg_order_sum', CASE WHEN t.order_count>0 THEN t.total_sum/t.order_count ELSE 0 END,
+          'top10_share_pct', COALESCE((SELECT SUM(z.total_sum)/NULLIF(t.total_sum,0)*100
+            FROM (SELECT total_sum FROM product_rows ORDER BY total_sum DESC LIMIT 10) z),0))
         FROM totals t CROSS JOIN header_totals h),
       'items', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC)
         FROM (SELECT r.*, CASE WHEN t.total_sum <> 0 THEN r.total_sum/t.total_sum*100 ELSE 0 END::numeric share_pct
               FROM product_rows r CROSS JOIN totals t
-              ORDER BY r.total_sum DESC LIMIT %s) x), '[]'::jsonb)
+              ORDER BY r.total_sum DESC LIMIT %s) x), '[]'::jsonb),
+      'types', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC)
+        FROM (SELECT pt.*,CASE WHEN t.total_sum<>0 THEN pt.total_sum/t.total_sum*100 ELSE 0 END::numeric share_pct
+              FROM product_types pt CROSS JOIN totals t ORDER BY pt.total_sum DESC) x),'[]'::jsonb)
     ) result
     """
     args = [agent_ids, agent_ids, delivery_man_ids, delivery_man_ids,
@@ -264,7 +299,7 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
         result = (await cur.fetchone())["result"]
     summary = result["summary"] or {}
     summary["refreshed_at"] = summary.get("refreshed_at")
-    return {"summary": summary, "items": result["items"]}
+    return {"summary": summary, "items": result["items"], "types": result["types"]}
 
 
 async def delete_range(date_from,date_to):
