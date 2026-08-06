@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Activity, Boxes, ChevronDown, Clock3, Filter, LayoutDashboard, PackageSearch, Percent, ReceiptText, RotateCcw, Search, Table2, TrendingUp, WalletCards, X } from 'lucide-react'
-import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Activity, Boxes, ChevronDown, Clock3, Expand, Filter, LayoutDashboard, PackageSearch, Percent, ReceiptText, RotateCcw, Search, SlidersHorizontal, Table2, TrendingUp, WalletCards, X } from 'lucide-react'
+import { Area, Bar, CartesianGrid, Cell, ComposedChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useProductAnalytics } from '../../hooks/useAnalytics'
 import { useAppStore } from '../../store/useAppStore'
 import { fmtSum } from '../../utils/formatters'
@@ -74,6 +74,7 @@ export default function ProductAnalyticsSection() {
   const [sort, setSort] = useState<SortKey>('total_sum')
   const [query, setQuery] = useState('')
   const [displayMode, setDisplayMode] = useState<'monitor' | 'details'>('monitor')
+  const [showProductFilters, setShowProductFilters] = useState(false)
   const activeFilterCount = appliedFilters.operators.length + appliedFilters.deliveries.length + appliedFilters.departments.length + appliedFilters.productIds.length + appliedFilters.zones.length
   const draftFilterCount = draftFilters.operators.length + draftFilters.deliveries.length + draftFilters.departments.length + draftFilters.productIds.length + draftFilters.zones.length
   const hasPendingChanges = JSON.stringify(draftFilters) !== JSON.stringify(appliedFilters)
@@ -94,7 +95,6 @@ export default function ProductAnalyticsSection() {
   const filterOptions = data.filter_options ?? { operators:[], deliveries:[], departments:[], products:[], zones:[] }
   const topSales = [...data.items].sort((a,b) => b.total_sum-a.total_sum).slice(0, 6)
   const topQuantity = [...data.items].sort((a,b) => b.quantity-a.quantity).slice(0, 6)
-  const maxType = Math.max(...data.types.map(type => Number(type.total_sum)), 1)
   const sourceLabel = dateField === 'created_date' ? 'Yaratilgan sana · order_product' : 'Yetkazish sanasi · delivery_product'
   const freshness = summary.refreshed_at ? new Date(summary.refreshed_at) : null
   const useDaily = data.daily.length > 1
@@ -110,25 +110,33 @@ export default function ProductAnalyticsSection() {
     { label: 'Chegirma', value: `${fmtSum(summary.discount_sum, true)} so‘m`, note: `yalpi summaning ${Number(summary.discount_rate_pct).toFixed(1)}%`, icon: Percent, color:'#fb923c' },
     { label: 'Qaytarilgan miqdor', value: fmt(summary.return_quantity, 3), note: `sotilgan miqdorning ${Number(summary.return_rate_pct).toFixed(1)}%`, icon: RotateCcw, color:'#f87171' },
   ]
+  const visibleCards = cards.slice(0, 4)
+  const typeColors = ['#8b5cf6','#3b82f6','#06b6d4','#f59e0b','#ec4899','#64748b']
+  const typeChart = data.types.slice(0, 6).map(type => ({ name:type.product_type, value:Number(type.total_sum), share:Number(type.share_pct) }))
+  const toggleFullscreen = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()
 
   return <section className="h-full min-h-0 flex flex-col gap-2">
-    <div className="flex items-center justify-between gap-4">
+    <div className="shrink-0 flex items-center justify-between gap-4">
       <div>
         <div className="flex items-center gap-2"><PackageSearch size={17} className="text-emerald-400"/><h2 className="font-bold text-slate-100">Mahsulotlar boshqaruv paneli</h2></div>
         <p className="text-[11px] text-slate-500 mt-0.5">{dateRange.from} — {dateRange.to} · {sourceLabel} · Operator, dostavshik, otdel, zona va produkt kesimlari</p>
       </div>
       <div className="flex items-center gap-3 text-[11px]">
+        <button onClick={() => setShowProductFilters(value => !value)} className={`h-7 px-2.5 rounded-lg border flex items-center gap-1.5 ${showProductFilters ? 'border-blue-500/50 bg-blue-500/15 text-blue-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'}`}><SlidersHorizontal size={12}/>{showProductFilters ? 'Filtrlarni yopish' : 'Filtrlar'}{activeFilterCount > 0 && <span className="text-blue-300">{activeFilterCount}</span>}</button>
         <div className="flex rounded-lg border border-slate-700 overflow-hidden">
           <button onClick={() => setDisplayMode('monitor')} className={`h-7 px-2.5 flex items-center gap-1.5 ${displayMode === 'monitor' ? 'bg-blue-500/20 text-blue-200' : 'text-slate-500 hover:text-slate-300'}`}><LayoutDashboard size={12}/>Monitor</button>
           <button onClick={() => setDisplayMode('details')} className={`h-7 px-2.5 flex items-center gap-1.5 ${displayMode === 'details' ? 'bg-blue-500/20 text-blue-200' : 'text-slate-500 hover:text-slate-300'}`}><Table2 size={12}/>Tafsilotlar</button>
         </div>
+        <button onClick={toggleFullscreen} title="To‘liq ekran" className="h-7 w-8 rounded-lg border border-slate-700 text-slate-400 hover:text-blue-200 hover:border-blue-500/40 flex items-center justify-center"><Expand size={13}/></button>
         <span className={`w-1.5 h-1.5 rounded-full ${isFetching ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
         <span className="text-slate-400">{isFetching ? 'Yangilanmoqda' : '5 daqiqalik monitoring'}</span>
         {freshness && <span className="flex items-center gap-1 text-slate-500 border-l border-slate-700 pl-2"><Clock3 size={11}/>{freshness.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>}
+        {Number(summary.discount_sum) > 0 && <span className="text-orange-300 border-l border-slate-700 pl-2">Chegirma {fmtSum(summary.discount_sum,true)}</span>}
+        {Number(summary.return_quantity) > 0 && <span className="text-red-300 border-l border-slate-700 pl-2">Qaytarish {fmt(summary.return_quantity,3)}</span>}
       </div>
     </div>
 
-    <div className={`${panel} px-3 py-2.5 flex flex-wrap items-center gap-2 overflow-visible`}>
+    {showProductFilters && <div className={`${panel} shrink-0 px-3 py-2.5 flex flex-wrap items-center gap-2 overflow-visible`}>
       <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mr-1"><Filter size={13} className="text-blue-400"/><span>Dashboard filtrlari</span>{activeFilterCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300 tabular-nums">{activeFilterCount} faol</span>}{hasPendingChanges && <span className="px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300">tanlov tayyor</span>}</div>
       <MultiFilter label="Operator" values={draftFilters.operators} options={filterOptions.operators.map(value => ({ value, label:value }))} onChange={values => updateFilter('operators', values as string[])} />
       <MultiFilter label="Dostavshik" values={draftFilters.deliveries} options={filterOptions.deliveries.map(value => ({ value, label:value }))} onChange={values => updateFilter('deliveries', values as string[])} />
@@ -140,53 +148,53 @@ export default function ProductAnalyticsSection() {
         {hasPendingChanges && <button onClick={() => setDraftFilters(appliedFilters)} className="h-8 px-2.5 rounded-lg border border-slate-700 text-[11px] text-slate-400 hover:text-slate-200">Bekor qilish</button>}
         <button onClick={applyFilters} disabled={!hasPendingChanges || isFetching} className="h-8 px-4 rounded-lg border border-blue-500/60 bg-blue-500/20 text-[11px] font-semibold text-blue-200 hover:bg-blue-500/30 disabled:opacity-35 disabled:cursor-not-allowed">{isFetching ? 'Qo‘llanmoqda…' : 'Qabul qilish'}</button>
       </div>
-    </div>
+    </div>}
 
-    <div className="grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-2">
-      {cards.map(card => <div key={card.label} className={`${panel} px-4 py-3 flex items-center gap-3 relative`}>
+    <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-2">
+      {visibleCards.map(card => <div key={card.label} className={`${panel} px-4 py-2.5 flex items-center gap-3 relative`}>
         <div className="absolute left-0 top-0 bottom-0 w-0.5" style={{background:card.color}} />
         <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{background:`${card.color}14`,border:`1px solid ${card.color}28`}}><card.icon size={17} style={{color:card.color}}/></div>
         <div className="min-w-0"><div className="text-[11px] text-slate-500">{card.label}</div><div className="text-xl font-black tabular-nums text-slate-100 truncate">{card.value}</div><div className="text-[10px] text-slate-600 truncate">{card.note}</div></div>
       </div>)}
     </div>
 
-    {displayMode === 'monitor' && <>
-    <div className={`${panel} p-3`}>
+    {displayMode === 'monitor' && <div className="flex-1 min-h-0 grid gap-2" style={{gridTemplateRows:'minmax(110px,.72fr) minmax(175px,1.18fr) minmax(165px,1fr)'}}>
+    <div className={`${panel} p-3 min-h-0 flex flex-col`}>
       <div className="flex items-center justify-between mb-1"><div><h3 className="text-[11px] font-bold tracking-wider text-slate-300 uppercase">Savdo dinamikasi</h3><p className="text-[9px] text-slate-600">{useDaily ? 'kunlar bo‘yicha' : 'buyurtma yaratilgan soat bo‘yicha'} · summa va buyurtmalar</p></div><Activity size={15} className="text-blue-400" /></div>
-      <div className="h-[145px]"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={trend} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
+      <div className="flex-1 min-h-0"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={trend} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
         <CartesianGrid stroke="#1e293b" vertical={false} /><XAxis dataKey="label" tick={{ fill:'#64748b', fontSize:9 }} axisLine={false} tickLine={false} />
         <YAxis yAxisId="orders" tick={{ fill:'#475569', fontSize:9 }} axisLine={false} tickLine={false} width={28} /><YAxis yAxisId="sum" orientation="right" tickFormatter={value => fmtSum(value, true)} tick={{ fill:'#475569', fontSize:9 }} axisLine={false} tickLine={false} width={38} />
         <Tooltip contentStyle={{ background:'#0f172a', border:'1px solid #334155', borderRadius:8, fontSize:11 }} formatter={(value, name) => name === 'Savdo' ? [`${fmtSum(Number(value), true)} so‘m`, name] : [`${fmt(Number(value))} ta`, name]} />
-        <Bar yAxisId="orders" dataKey="order_count" name="Buyurtma" fill="#2563eb" radius={[3,3,0,0]} maxBarSize={22} /><Line yAxisId="sum" type="monotone" dataKey="total_sum" name="Savdo" stroke="#a78bfa" strokeWidth={2.2} dot={false} />
+        <Bar yAxisId="orders" dataKey="order_count" name="Buyurtma" fill="#2563eb" radius={[3,3,0,0]} maxBarSize={22} /><Area yAxisId="sum" type="monotone" dataKey="total_sum" name="Savdo" stroke="#a78bfa" fill="#8b5cf620" strokeWidth={2.2} dot={false} />
       </ComposedChart></ResponsiveContainer></div>
     </div>
 
-    <div className="grid grid-cols-1 xl:grid-cols-12 gap-2">
-      <div className={`${panel} xl:col-span-4 p-3`}>
+    <div className="min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-2">
+      <div className={`${panel} xl:col-span-4 p-3 min-h-0`}>
         <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-bold tracking-wide text-slate-300 uppercase">Top savdo</h3><span className="text-[10px] text-slate-600">summa bo‘yicha</span></div>
         <RankedBars rows={topSales} metric="total_sum" color="#60a5fa" />
       </div>
-      <div className={`${panel} xl:col-span-4 p-3`}>
+      <div className={`${panel} xl:col-span-4 p-3 min-h-0`}>
         <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-bold tracking-wide text-slate-300 uppercase">Top miqdor</h3><span className="text-[10px] text-slate-600">mahsulotlar kesimida</span></div>
         <RankedBars rows={topQuantity} metric="quantity" color="#22d3ee" />
       </div>
-      <div className={`${panel} xl:col-span-4 p-3`}>
+      <div className={`${panel} xl:col-span-4 p-3 min-h-0`}>
         <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-bold tracking-wide text-slate-300 uppercase">Mahsulot turlari</h3><span className="text-[10px] text-slate-600">savdo tarkibi</span></div>
-        <div className="space-y-2.5">{data.types.slice(0,7).map(type => <div key={type.product_type}>
-          <div className="flex items-center gap-2 text-xs mb-1"><span className="flex-1 truncate text-slate-300" title={type.product_type}>{type.product_type}</span><span className="text-slate-500 tabular-nums">{type.product_count} tur</span><span className="text-violet-300 tabular-nums w-12 text-right">{Number(type.share_pct).toFixed(1)}%</span></div>
-          <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-violet-500/75 rounded-full" style={{width:`${Number(type.total_sum)/maxType*100}%`}}/></div>
-        </div>)}</div>
+        <div className="h-[calc(100%-28px)] min-h-0 flex items-center">
+          <div className="w-[46%] h-full min-h-[120px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={typeChart} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="82%" paddingAngle={2} stroke="none">{typeChart.map((_,index)=><Cell key={index} fill={typeColors[index % typeColors.length]}/>)}</Pie><Tooltip contentStyle={{background:'#0f172a',border:'1px solid #334155',borderRadius:8,fontSize:11}} formatter={value=>`${fmtSum(Number(value),true)} so‘m`}/></PieChart></ResponsiveContainer></div>
+          <div className="flex-1 space-y-2">{typeChart.slice(0,5).map((type,index)=><div key={type.name} className="flex items-center gap-2 text-[11px]"><span className="w-2 h-2 rounded-sm" style={{background:typeColors[index]}}/><span className="flex-1 truncate text-slate-300">{type.name}</span><span className="font-bold tabular-nums text-slate-200">{type.share.toFixed(1)}%</span></div>)}</div>
+        </div>
       </div>
     </div>
 
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+    <div className="min-h-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
       <Breakdown title="Operator" subtitle="buyurtma oluvchi" rows={data.agents} color="#60a5fa" />
       <Breakdown title="Dostavshik" subtitle="yetkazib beruvchi" rows={data.deliveries} color="#22d3ee" />
       <Breakdown title="Otdel" subtitle="do‘kon turi guruhlari" rows={data.departments} color="#fbbf24" />
       <Breakdown title="Zona" subtitle="hududlar bo‘yicha" rows={data.regions} color="#c084fc" />
     </div>
 
-    </>}
+    </div>}
 
     {displayMode === 'details' && <div className={`${panel} flex-1 min-h-0 flex flex-col`}>
       <div className="px-4 py-2.5 border-b border-slate-700/60 flex items-center justify-between gap-3">
