@@ -37,6 +37,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import db
 import db_analytics as analytics
 import sync as syncer
+import product_sync
 import prognoz
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -75,7 +76,10 @@ class ConnectionManager:
 manager = ConnectionManager()
 sync_task: Optional[asyncio.Task] = None
 active_load_task: Optional[asyncio.Task] = None
+product_sync_task: Optional[asyncio.Task] = None
+active_product_load_task: Optional[asyncio.Task] = None
 _load_lock = asyncio.Lock()
+_product_load_lock = asyncio.Lock()
 
 
 async def _maybe_start_today_autosync():
@@ -104,8 +108,9 @@ async def on_sync_done(count: int):
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    global sync_task
+    global sync_task, product_sync_task
     await db.init_db()
+    await product_sync.ensure_schema()
     try:
         await analytics.setup_analytics()
         logger.info("Analytics layer ready")
@@ -124,11 +129,16 @@ async def lifespan(_app: FastAPI):
     else:
         # Start today's auto-sync ONLY if today's data is already in DB.
         await _maybe_start_today_autosync()
+        if os.getenv("RITM_API_TOKEN"):
+            product_sync_task = asyncio.create_task(product_sync.sync_loop())
+            logger.info("RITM product auto-sync started")
 
     yield
 
     if sync_task:
         sync_task.cancel()
+    if product_sync_task:
+        product_sync_task.cancel()
     await db.close_pool()
 
 
@@ -495,6 +505,67 @@ async def data_delete_all(confirm: str = Query("")):
     deleted = await db.delete_all_orders()
     logger.info(f"All orders deleted: {deleted} rows")
     return {"deleted": deleted}
+
+
+# Product-line data management (RITM delivery_product)
+@app.get("/api/data/products/status", dependencies=[Depends(prognoz.admin)])
+async def product_data_status():
+    data = await product_sync.status()
+    data["auto_sync_running"] = product_sync_task is not None and not product_sync_task.done()
+    data["manual_sync_running"] = active_product_load_task is not None and not active_product_load_task.done()
+    return data
+
+
+@app.get("/api/data/products/logs", dependencies=[Depends(prognoz.admin)])
+async def product_data_logs(limit: int = Query(30, ge=1, le=200)):
+    return await product_sync.logs(limit)
+
+
+@app.post("/api/data/products/load", dependencies=[Depends(prognoz.admin)])
+async def product_data_load(date_from: str = Query(..., alias="dateFrom"),
+                            date_to: str = Query(..., alias="dateTo")):
+    _validate_date(date_from, "dateFrom"); _validate_date(date_to, "dateTo")
+    if date_from > date_to:
+        raise HTTPException(422, "dateFrom dateTo dan katta bo'lmasligi kerak")
+    global active_product_load_task
+    async with _product_load_lock:
+        if active_product_load_task and not active_product_load_task.done():
+            return {"status": "already_running"}
+        active_product_load_task = asyncio.create_task(product_sync.sync_range(date_from, date_to))
+    return {"status": "started", "date_from": date_from, "date_to": date_to}
+
+
+@app.post("/api/data/products/stop", dependencies=[Depends(prognoz.admin)])
+async def product_data_stop():
+    global active_product_load_task
+    if active_product_load_task and not active_product_load_task.done():
+        active_product_load_task.cancel()
+        return {"status": "stopping"}
+    return {"status": "no_active_sync"}
+
+
+@app.post("/api/data/products/autosync/start", dependencies=[Depends(prognoz.admin)])
+async def product_autosync_start():
+    global product_sync_task
+    if product_sync_task and not product_sync_task.done():
+        return {"status": "already_running"}
+    product_sync_task = asyncio.create_task(product_sync.sync_loop())
+    return {"status": "started"}
+
+
+@app.post("/api/data/products/autosync/stop", dependencies=[Depends(prognoz.admin)])
+async def product_autosync_stop():
+    global product_sync_task
+    if product_sync_task and not product_sync_task.done():
+        product_sync_task.cancel(); product_sync_task = None
+    return {"status": "stopped"}
+
+
+@app.delete("/api/data/products/range", dependencies=[Depends(prognoz.admin)])
+async def product_data_delete_range(date_from: str = Query(..., alias="dateFrom"),
+                                    date_to: str = Query(..., alias="dateTo")):
+    _validate_date(date_from, "dateFrom"); _validate_date(date_to, "dateTo")
+    return {"deleted": await product_sync.delete_range(date_from, date_to)}
 
 
 @app.get("/api/data/duplicates")

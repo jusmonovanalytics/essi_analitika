@@ -7,6 +7,7 @@ import {
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns'
 
 import { adminSarlavha } from '../api/admin'
+import ProductSyncPanel from '../components/data/ProductSyncPanel'
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
 
@@ -388,6 +389,8 @@ export default function DataManagement({ onBack }: { onBack?: () => void }) {
           </>
         ) : null}
       </div>
+
+      <ProductSyncPanel />
 
       {/* ── 2. MA'LUMOT YUKLASH ─────────────────────────────────────────────── */}
       <div className="glass-card p-5">
