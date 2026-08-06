@@ -110,7 +110,13 @@ export interface ProductAnalyticsData {
     product_count: number
     quantity: number
     total_sum: number
+    return_quantity: number
+    discount_sum: number
+    gross_sum: number
     avg_order_sum: number
+    avg_sku_per_order: number
+    discount_rate_pct: number
+    return_rate_pct: number
     top10_share_pct: number
     refreshed_at: string | null
   }
@@ -123,6 +129,20 @@ export interface ProductAnalyticsData {
     total_sum: number
     share_pct: number
   }>
+  hourly: Array<{ hour: number; order_count: number; total_sum: number }>
+  daily: Array<{ day: string; order_count: number; total_sum: number }>
+  agents: ProductBreakdownPoint[]
+  deliveries: ProductBreakdownPoint[]
+  regions: ProductBreakdownPoint[]
+  departments: ProductBreakdownPoint[]
+  market_types: ProductBreakdownPoint[]
+  payments: ProductBreakdownPoint[]
+}
+
+export interface ProductBreakdownPoint {
+  name: string
+  order_count: number
+  total_sum: number
 }
 
 // ─── Weekday / Market type ───────────────────────────────────────────────────

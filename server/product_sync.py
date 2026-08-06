@@ -227,7 +227,7 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
     ), filtered AS (
       SELECT p.*
       FROM {product_table} p
-      LEFT JOIN latest_orders o ON o.order_number = p.order_no
+      JOIN latest_orders o ON o.order_number = p.order_no
       WHERE {product_date} BETWEEN %s::date AND %s::date
         AND (%s::int[] IS NULL OR o.user_id = ANY(%s::int[])
              OR p.agent IN (SELECT user_name FROM selected_agents))
@@ -260,11 +260,49 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
         COUNT(DISTINCT order_no)::bigint order_count,
         SUM(amount)::numeric quantity,SUM(total_fact_price)::numeric total_sum
       FROM filtered GROUP BY product_type
+    ), hourly AS (
+      SELECT EXTRACT(HOUR FROM o.created_date)::int AS "hour",
+        COUNT(DISTINCT f.order_no)::bigint order_count,
+        SUM(f.total_fact_price)::numeric total_sum
+      FROM filtered f LEFT JOIN latest_orders o ON o.order_number=f.order_no
+      WHERE o.created_date IS NOT NULL
+      GROUP BY EXTRACT(HOUR FROM o.created_date)
+    ), daily AS (
+      SELECT {product_date} AS "day",COUNT(DISTINCT order_no)::bigint order_count,
+        SUM(total_fact_price)::numeric total_sum
+      FROM filtered p GROUP BY {product_date}
+    ), agents AS (
+      SELECT COALESCE(agent,'Noma\u2019lum') name,COUNT(DISTINCT order_no)::bigint order_count,
+        SUM(total_fact_price)::numeric total_sum FROM filtered GROUP BY agent
+    ), deliveries AS (
+      SELECT COALESCE(delivery_man,'Noma\u2019lum') name,COUNT(DISTINCT order_no)::bigint order_count,
+        SUM(total_fact_price)::numeric total_sum FROM filtered GROUP BY delivery_man
+    ), regions_breakdown AS (
+      SELECT COALESCE(border_name,'Noma\u2019lum') name,COUNT(DISTINCT order_no)::bigint order_count,
+        SUM(total_fact_price)::numeric total_sum FROM filtered GROUP BY border_name
+    ), departments AS (
+      SELECT CASE
+        WHEN market_type IN ('Диллеры','Наманган','Самарканд','Бухоро') THEN 'Диллеры'
+        WHEN market_type IN ('Магазин','VIP','OSDO','A - маркет','B - маркет','С - маркет','Розница') THEN 'Розница'
+        WHEN market_type IN ('Халк ретейл','Корзинка','Сеть','Сырная лавка','Макро','Урбант ретейл','Би-1','Магнум ретейл','Ассорти','Амирал Ритейл','Хавас') THEN 'Сеть'
+        WHEN market_type IN ('Бюджетная орг.','Школа / Садик','Гостиница','Кафе / Ресторан','Доставщики') THEN 'Хорика'
+        ELSE COALESCE(market_type,'Noma\u2019lum') END name,
+        COUNT(DISTINCT order_no)::bigint order_count,SUM(total_fact_price)::numeric total_sum
+      FROM filtered GROUP BY 1
+    ), market_types AS (
+      SELECT COALESCE(market_type,'Noma\u2019lum') name,COUNT(DISTINCT order_no)::bigint order_count,
+        SUM(total_fact_price)::numeric total_sum FROM filtered GROUP BY market_type
+    ), payments AS (
+      SELECT COALESCE(payment_type,'Noma\u2019lum') name,COUNT(DISTINCT order_no)::bigint order_count,
+        SUM(total_fact_price)::numeric total_sum FROM filtered GROUP BY payment_type
     ), totals AS (
       SELECT COUNT(DISTINCT order_no)::bigint order_count,
         COUNT(DISTINCT product_id)::bigint product_count,
         COALESCE(SUM(amount),0)::numeric quantity,
         COALESCE(SUM(total_fact_price),0)::numeric total_sum,
+        COALESCE(SUM(return_amount),0)::numeric return_quantity,
+        COALESCE(SUM(total_discount),0)::numeric discount_sum,
+        COALESCE(SUM(total_price),0)::numeric gross_sum,
         MAX(loaded_at) refreshed_at
       FROM filtered
     )
@@ -273,6 +311,10 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
           'all_order_count', h.all_order_count,
           'orders_without_products', GREATEST(h.all_order_count-t.order_count,0),
           'avg_order_sum', CASE WHEN t.order_count>0 THEN t.total_sum/t.order_count ELSE 0 END,
+          'avg_sku_per_order', COALESCE((SELECT AVG(s.sku_count) FROM
+            (SELECT COUNT(DISTINCT product_id)::numeric sku_count FROM filtered GROUP BY order_no) s),0),
+          'discount_rate_pct', CASE WHEN t.gross_sum>0 THEN t.discount_sum/t.gross_sum*100 ELSE 0 END,
+          'return_rate_pct', CASE WHEN t.quantity<>0 THEN t.return_quantity/t.quantity*100 ELSE 0 END,
           'top10_share_pct', COALESCE((SELECT SUM(z.total_sum)/NULLIF(t.total_sum,0)*100
             FROM (SELECT total_sum FROM product_rows ORDER BY total_sum DESC LIMIT 10) z),0))
         FROM totals t CROSS JOIN header_totals h),
@@ -282,7 +324,15 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
               ORDER BY r.total_sum DESC LIMIT %s) x), '[]'::jsonb),
       'types', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC)
         FROM (SELECT pt.*,CASE WHEN t.total_sum<>0 THEN pt.total_sum/t.total_sum*100 ELSE 0 END::numeric share_pct
-              FROM product_types pt CROSS JOIN totals t ORDER BY pt.total_sum DESC) x),'[]'::jsonb)
+              FROM product_types pt CROSS JOIN totals t ORDER BY pt.total_sum DESC) x),'[]'::jsonb),
+      'hourly', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x."hour") FROM hourly x),'[]'::jsonb),
+      'daily', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x."day") FROM daily x),'[]'::jsonb),
+      'agents', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC) FROM (SELECT * FROM agents ORDER BY total_sum DESC LIMIT 8) x),'[]'::jsonb),
+      'deliveries', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC) FROM (SELECT * FROM deliveries ORDER BY total_sum DESC LIMIT 8) x),'[]'::jsonb),
+      'regions', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC) FROM (SELECT * FROM regions_breakdown ORDER BY total_sum DESC LIMIT 8) x),'[]'::jsonb),
+      'departments', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC) FROM departments x),'[]'::jsonb),
+      'market_types', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC) FROM market_types x),'[]'::jsonb),
+      'payments', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC) FROM payments x),'[]'::jsonb)
     ) result
     """
     args = [agent_ids, agent_ids, delivery_man_ids, delivery_man_ids,
@@ -299,7 +349,11 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
         result = (await cur.fetchone())["result"]
     summary = result["summary"] or {}
     summary["refreshed_at"] = summary.get("refreshed_at")
-    return {"summary": summary, "items": result["items"], "types": result["types"]}
+    return {"summary": summary, "items": result["items"], "types": result["types"],
+            "hourly": result["hourly"], "daily": result["daily"],
+            "agents": result["agents"], "deliveries": result["deliveries"],
+            "regions": result["regions"], "departments": result["departments"],
+            "market_types": result["market_types"], "payments": result["payments"]}
 
 
 async def delete_range(date_from,date_to):
