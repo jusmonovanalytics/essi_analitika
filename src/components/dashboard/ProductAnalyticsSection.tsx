@@ -3,6 +3,7 @@ import { Boxes, PackageCheck, ReceiptText, Search, WalletCards } from 'lucide-re
 import { useProductAnalytics } from '../../hooks/useAnalytics'
 import { fmtSum } from '../../utils/formatters'
 import type { ProductAnalyticsItem } from '../../types/api'
+import { useAppStore } from '../../store/useAppStore'
 
 type SortKey = 'total_sum' | 'quantity' | 'order_count' | 'avg_price' | 'share_pct'
 
@@ -11,6 +12,7 @@ const number = (value: number, digits = 0) => new Intl.NumberFormat('ru-RU', {
 }).format(value)
 
 export default function ProductAnalyticsSection() {
+  const dateField = useAppStore(s => s.dateField)
   const { data, isLoading, isError } = useProductAnalytics()
   const [metric, setMetric] = useState<SortKey>('total_sum')
   const [sort, setSort] = useState<SortKey>('total_sum')
@@ -31,7 +33,7 @@ export default function ProductAnalyticsSection() {
   const max = Math.max(...top.map(x => x[metric]), 1)
   const cards = [
     { label: 'Sotilgan miqdor', value: number(summary.quantity, 3), icon: PackageCheck, color: 'text-cyan-400' },
-    { label: 'Mahsulotli buyurtmalar', value: number(summary.order_count), icon: ReceiptText, color: 'text-blue-400' },
+    { label: 'Buyurtmalar', value: number(summary.all_order_count), icon: ReceiptText, color: 'text-blue-400', sub: `${number(summary.order_count)} mahsulotli${summary.orders_without_products ? ` · ${number(summary.orders_without_products)} mahsulotsiz` : ''}` },
     { label: 'Faol mahsulotlar', value: number(summary.product_count), icon: Boxes, color: 'text-violet-400' },
     { label: 'Mahsulotlar savdosi', value: `${fmtSum(summary.total_sum)} so‘m`, icon: WalletCards, color: 'text-emerald-400' },
   ]
@@ -46,7 +48,7 @@ export default function ProductAnalyticsSection() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-primary">Mahsulotlar tahlili</h2>
-          <p className="text-xs text-muted mt-0.5">PostgreSQL · sotilgan/yetkazilgan sana · har 2 daqiqada yangilanadi</p>
+          <p className="text-xs text-muted mt-0.5">PostgreSQL · {dateField === 'created_date' ? 'buyurtma yaratilgan sana' : 'sotilgan/yetkazilgan sana'} · har 2 daqiqada yangilanadi</p>
         </div>
         {summary.refreshed_at && <span className="text-xs text-muted">Manba yangilangan: {new Date(summary.refreshed_at).toLocaleString('ru-RU')}</span>}
       </div>
@@ -54,7 +56,7 @@ export default function ProductAnalyticsSection() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {cards.map(card => <div key={card.label} className="glass-card p-4 flex items-center gap-3">
           <card.icon size={20} className={card.color} />
-          <div className="min-w-0"><div className="text-xs text-muted">{card.label}</div><div className={`text-lg font-bold tabular-nums truncate ${card.color}`}>{card.value}</div></div>
+          <div className="min-w-0"><div className="text-xs text-muted">{card.label}</div><div className={`text-lg font-bold tabular-nums truncate ${card.color}`}>{card.value}</div>{'sub' in card && card.sub && <div className="text-[11px] text-muted truncate">{card.sub}</div>}</div>
         </div>)}
       </div>
 

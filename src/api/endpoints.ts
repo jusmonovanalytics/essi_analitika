@@ -101,7 +101,7 @@ export const triggerSync = () =>
 
 export const fetchProductAnalytics = (f: DateFilters, limit = 500) =>
   get<ProductAnalyticsData>('/api/product-analytics', {
-    dateFrom: f.dateFrom, dateTo: f.dateTo, dateField: 'date_delivery', limit,
+    dateFrom: f.dateFrom, dateTo: f.dateTo, dateField: f.dateField, limit,
     agentId: joinIds(f.agentId), region: joinStrs(f.region),
     paymentType: joinStrs(f.paymentType), deliveryManId: joinIds(f.deliveryManId),
     status: joinStrs(f.statusFilter),

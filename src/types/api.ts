@@ -105,6 +105,8 @@ export interface ProductAnalyticsItem {
 export interface ProductAnalyticsData {
   summary: {
     order_count: number
+    all_order_count: number
+    orders_without_products: number
     product_count: number
     quantity: number
     total_sum: number
