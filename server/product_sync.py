@@ -17,6 +17,9 @@ DIMS = ["date_delivery_day", "order_number", "product_name", "product_id",
         "market_type_id", "border_id", "payment_type"]
 METRICS = ["fact_amount", "return_amount", "total_discount", "total_price",
            "total_fact_price"]
+CREATED_DIMS = ["created_date_day", "order_id", "product_name", "product_id",
+                "product_type_id", "user_id", "delivery_man_id", "market_id",
+                "market_type_id", "border_id", "payment_type"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ritm_order_products_test (
@@ -33,6 +36,19 @@ CREATE INDEX IF NOT EXISTS idx_ritm_products_sale_date ON ritm_order_products_te
 CREATE INDEX IF NOT EXISTS idx_ritm_products_order_no ON ritm_order_products_test(order_no);
 CREATE INDEX IF NOT EXISTS idx_ritm_products_created_at ON ritm_order_products_test(order_created_at);
 CREATE INDEX IF NOT EXISTS idx_ritm_products_product_id ON ritm_order_products_test(product_id);
+CREATE TABLE IF NOT EXISTS ritm_order_products_created (
+ id BIGSERIAL PRIMARY KEY, created_date DATE NOT NULL,
+ order_no BIGINT NOT NULL, product_id BIGINT NOT NULL, product_name TEXT,
+ product_type TEXT, agent TEXT, delivery_man TEXT, market TEXT, market_type TEXT,
+ border_name TEXT, payment_type TEXT, amount NUMERIC(18,3) NOT NULL DEFAULT 0,
+ return_amount NUMERIC(18,3) NOT NULL DEFAULT 0,
+ total_discount NUMERIC(18,2) NOT NULL DEFAULT 0,
+ total_price NUMERIC(18,2) NOT NULL DEFAULT 0,
+ total_fact_price NUMERIC(18,2) NOT NULL DEFAULT 0, raw JSONB NOT NULL,
+ loaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(created_date,order_no,product_id));
+CREATE INDEX IF NOT EXISTS idx_ritm_created_date ON ritm_order_products_created(created_date);
+CREATE INDEX IF NOT EXISTS idx_ritm_created_order ON ritm_order_products_created(order_no);
+CREATE INDEX IF NOT EXISTS idx_ritm_created_product ON ritm_order_products_created(product_id);
 CREATE TABLE IF NOT EXISTS product_sync_logs (
  id BIGSERIAL PRIMARY KEY, started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
  finished_at TIMESTAMPTZ, date_from DATE NOT NULL, date_to DATE NOT NULL,
@@ -54,26 +70,27 @@ def _headers():
     return {"Authorization": token, "Accept": "application/json"}
 
 
-def _payload(day: str):
+def _payload(day: str, model: str = "delivery_product"):
+    dims = CREATED_DIMS if model == "order_product" else DIMS
     return {
-        "model": "delivery_product",
+        "model": model,
         "filter": [
             {"field_name": {"value": "created_date"}, "operation": "greater_than", "value": day},
             {"field_name": {"value": "created_date"}, "operation": "less_than", "value": day},
         ],
         "select": ([{"field_name": x} for x in METRICS] +
-                   [{"type": "vertical", "field_name": x} for x in DIMS]),
-        "group_by": [{"type": "vertical", "field_name": x} for x in DIMS],
+                   [{"type": "vertical", "field_name": x} for x in dims]),
+        "group_by": [{"type": "vertical", "field_name": x} for x in dims],
         "report_type": "table",
     }
 
 
-async def fetch_day(client: httpx.AsyncClient, day: str) -> list[dict]:
-    response = await client.post(URL, headers=_headers(), json=_payload(day), timeout=180)
+async def fetch_day(client: httpx.AsyncClient, day: str, model: str = "delivery_product") -> list[dict]:
+    response = await client.post(URL, headers=_headers(), json=_payload(day, model), timeout=180)
     response.raise_for_status()
     data = response.json()
     if not isinstance(data, list):
-        raise RuntimeError("RITM delivery_product javobi ro'yxat emas")
+        raise RuntimeError(f"RITM {model} javobi ro'yxat emas")
     return data
 
 
@@ -85,8 +102,10 @@ async def sync_range(date_from: str, date_to: str) -> int:
         async with httpx.AsyncClient() as client:
             day = start
             while day <= end:
-                rows = await fetch_day(client, day.isoformat())
-                loaded += await replace_day(day, rows)
+                delivery_rows = await fetch_day(client, day.isoformat(), "delivery_product")
+                created_rows = await fetch_day(client, day.isoformat(), "order_product")
+                loaded += await replace_day(day, delivery_rows)
+                loaded += await replace_created_day(day, created_rows)
                 await update_log(log_id, loaded)
                 day += timedelta(days=1)
         await finish_log(log_id, loaded, "success")
@@ -131,6 +150,24 @@ async def replace_day(day, rows):
     return len(vals)
 
 
+async def replace_created_day(day, rows):
+    vals=[(day,int(r["order_id"]),int(r["product_name"]),r.get("product_id"),
+      r.get("product_type_id"),r.get("user_id"),r.get("delivery_man_id"),r.get("market_id"),
+      r.get("market_type_id"),r.get("border_id"),r.get("payment_type"),r.get("fact_amount") or 0,
+      r.get("return_amount") or 0,r.get("total_discount") or 0,r.get("total_price") or 0,
+      r.get("total_fact_price") or 0,json.dumps(r,ensure_ascii=False)) for r in rows]
+    pool=await db.get_pool()
+    async with pool.connection() as conn:
+      async with conn.cursor() as cur:
+        await cur.execute("DELETE FROM ritm_order_products_created WHERE created_date=%s",[day])
+        if vals: await cur.executemany("""INSERT INTO ritm_order_products_created
+          (created_date,order_no,product_id,product_name,product_type,agent,delivery_man,market,
+           market_type,border_name,payment_type,amount,return_amount,total_discount,total_price,total_fact_price,raw)
+          VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",vals)
+      await conn.commit()
+    return len(vals)
+
+
 async def status():
     pool=await db.get_pool()
     async with pool.connection() as conn:
@@ -147,7 +184,10 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
                     agent_ids=None, regions=None, payment_types=None,
                     delivery_man_ids=None, statuses=None, limit: int = 200):
     """Product sales KPIs and ranking, aggregated entirely by PostgreSQL."""
-    sql = """
+    product_table = "ritm_order_products_created" if date_field == "created_date" else "ritm_order_products_test"
+    product_date = "p.created_date" if date_field == "created_date" else "p.sale_date"
+    header_date = "o.created_date::date" if date_field == "created_date" else "o.date_delivery"
+    sql = f"""
     WITH latest_orders AS (
       SELECT DISTINCT ON (order_number)
         order_number, created_date, user_id, delivery_man_id, market_border,
@@ -163,15 +203,24 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
       WHERE %s::int[] IS NOT NULL AND delivery_man_id = ANY(%s::int[])
     ), filtered AS (
       SELECT p.*
-      FROM ritm_order_products_test p
+      FROM {product_table} p
       LEFT JOIN latest_orders o ON o.order_number = p.order_no
-      WHERE p.sale_date BETWEEN %s::date AND %s::date
+      WHERE {product_date} BETWEEN %s::date AND %s::date
         AND (%s::int[] IS NULL OR o.user_id = ANY(%s::int[])
              OR p.agent IN (SELECT user_name FROM selected_agents))
         AND (%s::text[] IS NULL OR COALESCE(o.market_border,p.border_name) = ANY(%s::text[]))
         AND (%s::text[] IS NULL OR COALESCE(o.payment_type,p.payment_type) = ANY(%s::text[]))
         AND (%s::int[] IS NULL OR o.delivery_man_id = ANY(%s::int[])
              OR p.delivery_man IN (SELECT delivery_man_name FROM selected_deliveries))
+        AND (%s::text[] IS NULL OR o.status = ANY(%s::text[]))
+    ), header_totals AS (
+      SELECT COUNT(DISTINCT o.order_number)::bigint all_order_count
+      FROM latest_orders o
+      WHERE {header_date} BETWEEN %s::date AND %s::date
+        AND (%s::int[] IS NULL OR o.user_id = ANY(%s::int[]))
+        AND (%s::text[] IS NULL OR o.market_border = ANY(%s::text[]))
+        AND (%s::text[] IS NULL OR o.payment_type = ANY(%s::text[]))
+        AND (%s::int[] IS NULL OR o.delivery_man_id = ANY(%s::int[]))
         AND (%s::text[] IS NULL OR o.status = ANY(%s::text[]))
     ), product_rows AS (
       SELECT product_id, COALESCE(product_name,'Noma\u2019lum mahsulot') product_name,
@@ -191,7 +240,10 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
       FROM filtered
     )
     SELECT jsonb_build_object(
-      'summary', (SELECT to_jsonb(t) FROM totals t),
+      'summary', (SELECT to_jsonb(t) || jsonb_build_object(
+          'all_order_count', h.all_order_count,
+          'orders_without_products', GREATEST(h.all_order_count-t.order_count,0))
+        FROM totals t CROSS JOIN header_totals h),
       'items', COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY x.total_sum DESC)
         FROM (SELECT r.*, CASE WHEN t.total_sum <> 0 THEN r.total_sum/t.total_sum*100 ELSE 0 END::numeric share_pct
               FROM product_rows r CROSS JOIN totals t
@@ -199,6 +251,9 @@ async def analytics(date_from: str, date_to: str, date_field: str = "date_delive
     ) result
     """
     args = [agent_ids, agent_ids, delivery_man_ids, delivery_man_ids,
+            date_from, date_to, agent_ids, agent_ids, regions, regions,
+            payment_types, payment_types, delivery_man_ids, delivery_man_ids,
+            statuses, statuses,
             date_from, date_to, agent_ids, agent_ids, regions, regions,
             payment_types, payment_types, delivery_man_ids, delivery_man_ids,
             statuses, statuses, limit]
@@ -217,6 +272,7 @@ async def delete_range(date_from,date_to):
     async with pool.connection() as conn:
       async with conn.cursor() as cur:
         await cur.execute("DELETE FROM ritm_order_products_test WHERE sale_date BETWEEN %s AND %s",[date_from,date_to]); count=cur.rowcount
+        await cur.execute("DELETE FROM ritm_order_products_created WHERE created_date BETWEEN %s AND %s",[date_from,date_to]); count += cur.rowcount
       await conn.commit()
     return count
 
