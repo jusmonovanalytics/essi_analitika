@@ -4,6 +4,7 @@ import * as api from '../api/endpoints'
 import type { DateFilters } from '../api/endpoints'
 import type { StatusPoint } from '../types/api'
 import type { ExtendedChartsData, DeliveryExtData } from '../types/api'
+import type { ProductAnalyticsData } from '../types/api'
 
 // 2-minute refresh for live periods (today / yesterday / week / month)
 const LIVE_MS = 2 * 60 * 1000
@@ -88,6 +89,17 @@ export function useCharts() {
     queryKey: ['charts', f],
     queryFn: () => api.fetchCharts(f),
     refetchInterval: ri,
+    refetchIntervalInBackground: true,
+    staleTime: 60_000,
+  })
+}
+
+export function useProductAnalytics(limit = 500) {
+  const f = useFilterState()
+  return useQuery({
+    queryKey: ['productAnalytics', f, limit],
+    queryFn: (): Promise<ProductAnalyticsData> => api.fetchProductAnalytics(f, limit),
+    refetchInterval: LIVE_MS,
     refetchIntervalInBackground: true,
     staleTime: 60_000,
   })
