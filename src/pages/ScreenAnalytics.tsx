@@ -6,7 +6,7 @@ import {
 import {
   RefreshCw, Activity, Wifi, WifiOff, AlertTriangle, X,
   ShoppingCart, DollarSign, TrendingUp, Database,
-  SlidersHorizontal, CalendarDays,
+  SlidersHorizontal, CalendarDays, PackageSearch,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCharts, useKpis, useDeliveries, useAgents } from '../hooks/useAnalytics'
@@ -15,6 +15,7 @@ import { useT, useLangStore } from '../i18n'
 import { fmtSum } from '../utils/formatters'
 import type { RegionalPoint, HourlyPoint, DeliveryData, KPIData } from '../types/api'
 import type { DatePreset } from '../types'
+import ProductAnalyticsSection from '../components/dashboard/ProductAnalyticsSection'
 
 const API = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8001'
 
@@ -227,10 +228,12 @@ function SyncAlert() {
 }
 
 // ─── TopBar ───────────────────────────────────────────────────────────────────
-function TopBar({ onGoToData, showFilters, onToggleFilters }: {
+function TopBar({ onGoToData, showFilters, onToggleFilters, view, onViewChange }: {
   onGoToData?: () => void
   showFilters: boolean
   onToggleFilters: () => void
+  view: 'orders' | 'products'
+  onViewChange: (view: 'orders' | 'products') => void
 }) {
   const t = useT()
   const { lang, setLang } = useLangStore()
@@ -278,6 +281,21 @@ function TopBar({ onGoToData, showFilters, onToggleFilters }: {
           </span>
         )}
       </button>
+
+      <div className="flex gap-0.5 rounded-lg p-0.5 border" style={{
+        background:'rgba(255,255,255,0.025)', borderColor:'rgba(255,255,255,0.07)',
+      }}>
+        <button onClick={() => onViewChange('orders')}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all"
+          style={{ background:view === 'orders' ? 'rgba(59,130,246,0.18)' : 'transparent', color:view === 'orders' ? '#93c5fd' : '#4b5563' }}>
+          <ShoppingCart size={11}/>Buyurtmalar
+        </button>
+        <button onClick={() => onViewChange('products')}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all"
+          style={{ background:view === 'products' ? 'rgba(16,185,129,0.16)' : 'transparent', color:view === 'products' ? '#6ee7b7' : '#4b5563' }}>
+          <PackageSearch size={11}/>Mahsulotlar
+        </button>
+      </div>
 
       {/* Yetkazish sanasi rejimi — filtr paneli yopiq bo'lsa ham bilinib tursin,
           chunki bu barcha raqamlarni o'zgartiradi. */}
@@ -643,6 +661,7 @@ function RegionBars({ data }: { data: RegionalPoint[] }) {
 export default function ScreenAnalytics({ onGoToData }: { onGoToData?: () => void }) {
   const t = useT()
   const [showFilters, setShowFilters] = useState(false)
+  const [view, setView] = useState<'orders' | 'products'>('orders')
   const { data: charts, isLoading } = useCharts()
   const { data: kpis  }             = useKpis()
   const { data: agents = [] }       = useAgents()
@@ -689,12 +708,18 @@ export default function ScreenAnalytics({ onGoToData }: { onGoToData?: () => voi
 
   return (
     <div className="h-screen flex flex-col overflow-hidden" style={{ background:'#07101f' }}>
-      <TopBar onGoToData={onGoToData} showFilters={showFilters} onToggleFilters={() => setShowFilters(v => !v)} />
+      <TopBar onGoToData={onGoToData} showFilters={showFilters} onToggleFilters={() => setShowFilters(v => !v)} view={view} onViewChange={setView} />
       <SyncAlert />
       {showFilters && <FilterBar />}
-      {kpis && <KpiRow d={kpis} />}
+      {view === 'orders' && kpis && <KpiRow d={kpis} />}
 
-      {isLoading && (
+      {view === 'products' && (
+        <div className="flex-1 min-h-0 overflow-y-auto p-3">
+          <ProductAnalyticsSection />
+        </div>
+      )}
+
+      {view === 'orders' && isLoading && (
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <div className="w-9 h-9 rounded-full border-2 border-blue-500/20 border-t-blue-500 animate-spin" />
@@ -703,7 +728,7 @@ export default function ScreenAnalytics({ onGoToData }: { onGoToData?: () => voi
         </div>
       )}
 
-      {!isLoading && charts && (
+      {view === 'orders' && !isLoading && charts && (
         <div className="flex-1 min-h-0 p-2 grid gap-2" style={{
           gridTemplateColumns: '2.8fr 2fr 2fr',
           gridTemplateRows:    '44% 56%',
